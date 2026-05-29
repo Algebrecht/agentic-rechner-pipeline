@@ -22,3 +22,6 @@ vorlagen. **Kein** Teil der Laufzeit-/Pipeline-Logik — reine Doku.
 - [CR-003](CR-003-ci-matrix.md) — GitHub-Actions-Matrix (Linux/macOS/Windows ×
   Python 3.11–3.13): Tests + Excel-freier Export-Smoke, macht „cross-platform"
   automatisch verifizierbar.
+- [CR-004](CR-004-containerized-run.md) — containerisierter Run (kanonische
+  Linux-Laufzeit) für den Excel-freien Pfad; Sicherheits-Synergie
+  (Compare-Stufe `--network none`). COM bleibt nativer Windows-Pfad.
