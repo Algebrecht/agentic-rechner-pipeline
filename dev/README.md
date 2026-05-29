@@ -18,4 +18,7 @@ vorlagen. **Kein** Teil der Laufzeit-/Pipeline-Logik — reine Doku.
   Claude-Subscription-Auth (Agent SDK) statt gemeterter API zur Kostensenkung.
 - [CR-002](CR-002-fixed-golden-master-harness.md) — fester, reviewter
   Golden-Master-Harness statt LLM-generiertem Test (löst Security-Idiom-Varianz,
-  Orakel-Unabhängigkeit und halbiert die Kosten pro Lauf).
+  Orakel-Unabhängigkeit und halbiert die Kosten pro Lauf). **Umgesetzt.**
+- [CR-003](CR-003-ci-matrix.md) — GitHub-Actions-Matrix (Linux/macOS/Windows ×
+  Python 3.11–3.13): Tests + Excel-freier Export-Smoke, macht „cross-platform"
+  automatisch verifizierbar.
