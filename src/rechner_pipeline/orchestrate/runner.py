@@ -87,6 +87,7 @@ class PipelineOptions:
     provider: str = "openai"
     max_output_tokens: int = 32_000
     export_backend: str = "openpyxl"
+    test_mode: str = "fixed"
 
 
 class PipelineRunner:
@@ -130,7 +131,9 @@ class PipelineRunner:
             manifest = self.prepare_manifest()
             if not self.options.skip_main_llm:
                 manifest = self.run_main_llm(manifest)
-            if not self.options.skip_test_llm:
+            # Test-LLM-Stufe nur im Legacy-Modus 'llm'; 'fixed' nutzt den festen
+            # reviewten Golden-Master-Harness (siehe dev/CR-002).
+            if self.options.test_mode == "llm" and not self.options.skip_test_llm:
                 manifest = self.run_test_llm(manifest)
             if not self.options.skip_compare_run:
                 self.run_compare()
@@ -534,24 +537,34 @@ class PipelineRunner:
         return manifest
 
     def run_compare(self) -> None:
-        if not self.test_py_path.exists():
-            raise FileNotFoundError(f"Missing test file: {self.test_py_path}")
-        try:
-            self.run_static_security_check()
-        except StaticSecurityError as exc:
-            raise RuntimeError(
-                "Static security check blocked generated test execution. "
-                f"Structured report written to {self.static_security_report_path}"
-            ) from exc
         from rechner_pipeline.qa import fs_confine
 
-        # Laufzeit-Confinement: generierter Test darf nur unterhalb des
-        # Repo-Roots lesen (Schreiben/Netz/Subprocess sind statisch verboten).
+        if self.options.test_mode == "fixed":
+            # Fester, reviewter Golden-Master-Harness (kein LLM-Output -> keine
+            # statische Security-Prüfung nötig); siehe dev/CR-002.
+            from rechner_pipeline.qa import golden_master
+
+            harness_file = golden_master.__file__
+        else:
+            # Legacy: pro Lauf LLM-generierter Test -> erst statisch prüfen.
+            if not self.test_py_path.exists():
+                raise FileNotFoundError(f"Missing test file: {self.test_py_path}")
+            try:
+                self.run_static_security_check()
+            except StaticSecurityError as exc:
+                raise RuntimeError(
+                    "Static security check blocked generated test execution. "
+                    f"Structured report written to {self.static_security_report_path}"
+                ) from exc
+            harness_file = str(self.test_py_path)
+
+        # Laufzeit-Confinement: der Harness darf nur unterhalb des Repo-Roots
+        # lesen (Schreiben/Netz/Subprocess sind statisch verboten).
         command = [
             sys.executable,
             fs_confine.__file__,
             str(self.repo_root),
-            str(self.test_py_path),
+            harness_file,
         ]
         completed = subprocess.run(
             command,
@@ -566,7 +579,7 @@ class PipelineRunner:
             print(completed.stderr, end="", file=sys.stderr)
 
         result = {
-            "test_file": str(self.test_py_path),
+            "test_file": harness_file,
             "command": command,
             "cwd": str(self.generated_dir),
             "returncode": completed.returncode,

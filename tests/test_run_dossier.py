@@ -28,6 +28,7 @@ def _options(**overrides) -> PipelineOptions:
         "test_max_total_chars": 100,
         "reasoning_effort": "low",
         "strict_manifest_warnings": False,
+        "test_mode": "llm",
     }
     values.update(overrides)
     return PipelineOptions(**values)

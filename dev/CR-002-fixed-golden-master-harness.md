@@ -1,6 +1,9 @@
 # CR-002 — Fester, reviewter Golden-Master-Harness statt LLM-generiertem Test
 
-- **Status:** Vorschlag (Entscheidung offen)
+- **Status:** Umgesetzt auf `feat/anthropic-provider` (Default `--test-mode fixed`);
+  Contract mit Alexander in der Übergabe zu bestätigen; E2E-Verifikation gegen
+  echten Rechenkern = 1 bezahlter Lauf ausstehend. Mechanik per Integrationstest
+  (Subprozess + Confinement + Contract-Import + Vergleich) offline verifiziert.
 - **Datum:** 2026-05-29
 - **Branch-Kontext:** `feat/anthropic-provider`
 - **Betroffen:** `prompts/v1/excel_to_py.txt` (Contract), `prompts/v1/test_advanced.txt` (entfällt),
@@ -87,6 +90,21 @@ Report + Exit-Code. **Das ist zugleich das unabhängige Orakel.**
    outputs()` fehlt/abweicht)?
 4. Zusammenspiel mit der (späteren) wirklich unabhängigen Orakel-Absicherung
    (z. B. zweite Implementierung / manueller Review der erwarteten Werte).
+
+## 8. Umsetzung (Stand 2026-05-29)
+
+- **Fester Harness:** `src/rechner_pipeline/qa/golden_master.py` (stdlib-only,
+  reviewbar): lädt Erwartungswerte, ruft `golden_master_outputs()`, vergleicht
+  (4-Dezimal-Rundung, case-sensitive Spalten-Zuordnung mit Trennzeichen-Varianten),
+  Report + Exit-Code.
+- **Contract** in `prompts/v1/excel_to_py.txt` ergänzt (Pflicht-Funktion in
+  `test_run.py`).
+- **Runner:** `--test-mode {fixed,llm}` (Default `fixed`). `fixed` überspringt
+  die Test-LLM-Stufe und führt den festen Harness via `fs_confine` aus (kein
+  statisches Gate, da reviewter Code). `llm` = bisheriges Verhalten (Fallback).
+- **Tests:** Vergleichs-Engine (synthetisch) + Fixed-Mode-Integration (Subprozess).
+- **Noch offen:** Contract mit Alexander bestätigen; 1 bezahlter Lauf, in dem der
+  generierte Rechenkern `golden_master_outputs()` implementiert; offene Punkte §6.
 
 ## 7. Empfehlung
 

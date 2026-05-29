@@ -63,6 +63,18 @@ def _add_common_options(ap: argparse.ArgumentParser) -> None:
         ),
     )
 
+    ap.add_argument(
+        "--test-mode",
+        dest="test_mode",
+        default="fixed",
+        choices=["fixed", "llm"],
+        help=(
+            "Validierung: fixed (Default, fester reviewter Golden-Master-Harness; "
+            "Rechenkern muss golden_master_outputs() liefern) oder llm (Legacy, "
+            "Test pro Lauf vom LLM generiert)"
+        ),
+    )
+
     ap.add_argument("--skip_export", action="store_true")
     ap.add_argument("--skip_main_llm", action="store_true")
     ap.add_argument("--skip_test_llm", action="store_true")
@@ -108,6 +120,7 @@ def _options_from_namespace(ns: argparse.Namespace):
         provider=ns.provider,
         max_output_tokens=ns.max_output_tokens,
         export_backend=ns.export_backend,
+        test_mode=ns.test_mode,
     )
 
 

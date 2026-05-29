@@ -20,6 +20,7 @@ def _options() -> PipelineOptions:
         test_max_chars_per_file=100,
         test_max_total_chars=100,
         reasoning_effort="low",
+        test_mode="llm",
     )
 
 
