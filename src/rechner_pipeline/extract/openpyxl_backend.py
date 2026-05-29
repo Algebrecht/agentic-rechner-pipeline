@@ -35,6 +35,29 @@ from rechner_pipeline.extract.excel import (
 )
 
 
+def _cell_text(value: Any) -> str:
+    """Wandle einen openpyxl-Zellwert in Text fuer das CSV-Schema.
+
+    * Array-/DataTable-Formeln (openpyxl liefert Objekte) -> Formelstring.
+    * Ganzzahlige Floats (``5.0``) -> ``"5"`` (entspricht dem COM-Output und
+      vermeidet kosmetische Diffs).
+    """
+    try:
+        from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula  # type: ignore
+
+        if isinstance(value, (ArrayFormula, DataTableFormula)):
+            value = getattr(value, "text", value)
+    except Exception:
+        # Fallback ohne harte Abhaengigkeit auf interne openpyxl-Klassen.
+        text_attr = getattr(value, "text", None)
+        if text_attr is not None and not isinstance(value, (str, int, float, bool)):
+            value = text_attr
+
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return excel_value_to_text(value)
+
+
 def _import_openpyxl() -> Any:
     try:
         import openpyxl  # type: ignore
@@ -76,7 +99,9 @@ def export_one_sheet(ws_formula, ws_value, sheet_name: str, out_dir: Path) -> Op
                 value_cell = ws_value[cell.coordinate]
                 raw_value = value_cell.value
 
-                formula_txt = excel_value_to_text(raw_formula)
+                # Formel: Array-Formeln aufloesen, ganzzahlige Literale ohne ".0"
+                # (entspricht COMs .Formula). Wert: COMs Float-Repr beibehalten.
+                formula_txt = _cell_text(raw_formula)
                 value_txt = excel_value_to_text(raw_value)
                 if is_empty_text(formula_txt) and is_empty_text(value_txt):
                     continue
@@ -188,7 +213,7 @@ def _evaluate_single_cell_name(defined_name, wb_value) -> str:
     sheet_title, coord = destinations[0]
     try:
         ws = wb_value[sheet_title]
-        return excel_value_to_text(ws[coord.replace("$", "")].value)
+        return _cell_text(ws[coord.replace("$", "")].value)
     except Exception:
         return ""
 
