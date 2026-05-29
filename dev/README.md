@@ -30,3 +30,5 @@ vorlagen. **Kein** Teil der Laufzeit-/Pipeline-Logik — reine Doku.
 - [CR-004](CR-004-containerized-run.md) — containerisierter Run (kanonische
   Linux-Laufzeit) für den Excel-freien Pfad; Sicherheits-Synergie
   (Compare-Stufe `--network none`). COM bleibt nativer Windows-Pfad.
+- [CR-005](CR-005-model-escalation.md) — Modellwahl + Eskalations-Strategie
+  (Sonnet-Default, Opus-Eskalation bei Nicht-Konvergenz) mit Mess-Protokoll.
