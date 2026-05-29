@@ -111,7 +111,7 @@ class Report:
             lines.append(f"  nicht zugeordnet: {', '.join(self.unmatched_columns[:10])}")
         total = self.scalars_tested + self.table_cells_tested
         lines.append(
-            f"  RESULT: {'ALLE ' + str(total) + ' TESTS BESTANDEN ✓' if self.ok else 'FEHLGESCHLAGEN'}"
+            f"  RESULT: {'ALLE ' + str(total) + ' TESTS BESTANDEN' if self.ok else 'FEHLGESCHLAGEN'}"
         )
         return "\n".join(lines)
 
