@@ -53,7 +53,8 @@ def test_build_openai_client_loads_key_from_env_file(monkeypatch, tmp_path: Path
     fake_openai = types.ModuleType("openai")
 
     class FakeOpenAI:
-        pass
+        def __init__(self, api_key=None):
+            self.api_key = api_key
 
     fake_openai.OpenAI = FakeOpenAI
     monkeypatch.setitem(sys.modules, "openai", fake_openai)
@@ -61,6 +62,7 @@ def test_build_openai_client_loads_key_from_env_file(monkeypatch, tmp_path: Path
     client = build_openai_client(env_path=env_path)
 
     assert isinstance(client, FakeOpenAI)
+    assert client.api_key == "from-dotenv"
     assert os.environ["OPENAI_API_KEY"] == "from-dotenv"
 
 

@@ -16,11 +16,32 @@ import argparse
 from pathlib import Path
 
 
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": "gpt-5.2",
+    "anthropic": "claude-sonnet-4-6",
+}
+
+
 def _add_common_options(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
+        "--provider",
+        default="openai",
+        choices=["openai", "anthropic"],
+        help="LLM-Provider (Default: openai)",
+    )
+    ap.add_argument(
         "--model",
-        default="gpt-5.2",
-        help="OpenAI model name for Responses API",
+        default=None,
+        help=(
+            "Modellname. Default je Provider: openai=gpt-5.2, "
+            "anthropic=claude-sonnet-4-6"
+        ),
+    )
+    ap.add_argument(
+        "--max_output_tokens",
+        type=int,
+        default=16_000,
+        help="Max. Output-Tokens (nur Anthropic; OpenAI Responses ignoriert dies)",
     )
     ap.add_argument(
         "--excel",
@@ -59,8 +80,10 @@ def _add_common_options(ap: argparse.ArgumentParser) -> None:
 def _options_from_namespace(ns: argparse.Namespace):
     from rechner_pipeline.orchestrate.runner import PipelineOptions
 
+    model = ns.model or _DEFAULT_MODEL_BY_PROVIDER[ns.provider]
+
     return PipelineOptions(
-        model=ns.model,
+        model=model,
         skip_export=ns.skip_export,
         skip_main_llm=ns.skip_main_llm,
         skip_test_llm=ns.skip_test_llm,
@@ -71,6 +94,8 @@ def _options_from_namespace(ns: argparse.Namespace):
         test_max_total_chars=ns.test_max_total_chars,
         reasoning_effort=ns.reasoning_effort,
         strict_manifest_warnings=ns.strict_manifest_warnings,
+        provider=ns.provider,
+        max_output_tokens=ns.max_output_tokens,
     )
 
 

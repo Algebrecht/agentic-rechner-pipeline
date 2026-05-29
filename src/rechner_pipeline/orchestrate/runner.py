@@ -22,6 +22,7 @@ from rechner_pipeline.context.prompt_builder import (
     read_text,
     write_text,
 )
+from rechner_pipeline.generate.client import generate_completion
 from rechner_pipeline.generate.output import (
     EXPECTED_MAIN_OUTPUT_FILES,
     validate_main_output_files,
@@ -83,6 +84,8 @@ class PipelineOptions:
     test_max_total_chars: int
     reasoning_effort: str
     strict_manifest_warnings: bool = False
+    provider: str = "openai"
+    max_output_tokens: int = 16_000
 
 
 class PipelineRunner:
@@ -110,9 +113,11 @@ class PipelineRunner:
     @property
     def client(self):
         if self._client is None:
-            from rechner_pipeline.generate.client import build_openai_client
+            from rechner_pipeline.generate.client import build_llm_client
 
-            self._client = build_openai_client(env_path=self.repo_root / ".env")
+            self._client = build_llm_client(
+                self.options.provider, env_path=self.repo_root / ".env"
+            )
         return self._client
 
     def run(self) -> None:
@@ -380,12 +385,14 @@ class PipelineRunner:
         self._write_manifest(manifest)
         self._enforce_strict_manifest_warnings(manifest)
 
-        resp = self.client.responses.create(
+        llm_output = generate_completion(
+            self.client,
+            provider=self.options.provider,
             model=self.options.model,
-            input=final_prompt,
-            reasoning={"effort": self.options.reasoning_effort},
+            prompt=final_prompt,
+            reasoning_effort=self.options.reasoning_effort,
+            max_output_tokens=self.options.max_output_tokens,
         )
-        llm_output = resp.output_text
         main_output_items = validate_main_output_files(llm_output)
         self._run_static_security_check_for_items(main_output_items)
         write_main_output_items_to_generated_dir(main_output_items, self.repo_root)
@@ -483,12 +490,14 @@ class PipelineRunner:
         self._write_manifest(manifest)
         self._enforce_strict_manifest_warnings(manifest)
 
-        resp = self.client.responses.create(
+        llm_output = generate_completion(
+            self.client,
+            provider=self.options.provider,
             model=self.options.model,
-            input=final_prompt,
-            reasoning={"effort": self.options.reasoning_effort},
+            prompt=final_prompt,
+            reasoning_effort=self.options.reasoning_effort,
+            max_output_tokens=self.options.max_output_tokens,
         )
-        llm_output = resp.output_text
         extracted = extract_test_run_advanced(llm_output)
         if extracted is None:
             raise RuntimeError("Could not find test_run_advanced.py block in LLM output.")

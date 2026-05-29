@@ -28,13 +28,48 @@ def load_env_file(env_path: Path) -> None:
         os.environ[key] = value
 
 
-def build_openai_client(env_path: Path | None = None) -> Any:
+def resolve_api_key(key_name: str, env_path: Path | None = None) -> str:
+    """Loese einen API-Key auf, ohne ihn in einer persistenten Host-Variable zu verlangen.
+
+    Aufloesungs-Reihenfolge:
+
+    1. Echte Umgebungsvariable ``<key_name>`` (Rueckwaertskompatibilitaet).
+    2. ``<key_name>_FILE`` -> Pfad zu einer restriktiv berechtigten Secret-Datei
+       (empfohlen). ``.env`` enthaelt dann nur den Pointer, nie das Geheimnis.
+
+    Der zurueckgegebene Key wird vom Aufrufer direkt an den SDK-Konstruktor
+    uebergeben und landet bewusst nicht in ``os.environ``.
+    """
     if env_path is not None:
         load_env_file(env_path)
 
-    if not os.getenv("OPENAI_API_KEY"):
-        location = f" or in {env_path}" if env_path is not None else ""
-        raise RuntimeError(f"OPENAI_API_KEY is not set in environment variables{location}.")
+    direct = os.getenv(key_name)
+    if direct:
+        return direct
+
+    file_pointer = os.getenv(f"{key_name}_FILE")
+    if file_pointer:
+        secret_path = Path(file_pointer).expanduser()
+        if not secret_path.exists():
+            raise RuntimeError(
+                f"{key_name}_FILE points to {secret_path}, but that file does not exist."
+            )
+        secret = secret_path.read_text(encoding="utf-8").strip()
+        if not secret:
+            raise RuntimeError(
+                f"Secret file {secret_path} (from {key_name}_FILE) is empty."
+            )
+        return secret
+
+    location = f" or in {env_path}" if env_path is not None else ""
+    raise RuntimeError(
+        f"{key_name} is not set: provide it via the {key_name} environment "
+        f"variable or a {key_name}_FILE pointer to a secret file{location}."
+    )
+
+
+def build_openai_client(env_path: Path | None = None) -> Any:
+    api_key = resolve_api_key("OPENAI_API_KEY", env_path)
 
     try:
         from openai import OpenAI  # type: ignore
@@ -43,4 +78,86 @@ def build_openai_client(env_path: Path | None = None) -> Any:
             "Missing LLM dependency. Run: pip install -e '.[llm]'"
         ) from exc
 
-    return OpenAI()
+    return OpenAI(api_key=api_key)
+
+
+def build_anthropic_client(env_path: Path | None = None) -> Any:
+    api_key = resolve_api_key("ANTHROPIC_API_KEY", env_path)
+
+    try:
+        from anthropic import Anthropic  # type: ignore
+    except Exception as exc:
+        raise RuntimeError(
+            "Missing LLM dependency. Run: pip install -e '.[anthropic]'"
+        ) from exc
+
+    return Anthropic(api_key=api_key)
+
+
+def build_llm_client(provider: str, env_path: Path | None = None) -> Any:
+    """Baue den passenden Raw-Client (OpenAI oder Anthropic) nach Provider."""
+    if provider == "openai":
+        return build_openai_client(env_path=env_path)
+    if provider == "anthropic":
+        return build_anthropic_client(env_path=env_path)
+    raise ValueError(f"Unknown LLM provider: {provider!r} (expected 'openai' or 'anthropic').")
+
+
+# reasoning_effort -> Extended-Thinking-Budget (Tokens) fuer Anthropic.
+# 0 = Thinking deaktiviert (Anthropic verlangt sonst budget_tokens >= 1024).
+_ANTHROPIC_THINKING_BUDGET = {"low": 0, "medium": 4096, "high": 12288}
+
+
+def _anthropic_response_text(resp: Any) -> str:
+    """Konkateniere die Text-Bloecke einer Anthropic-Messages-Antwort.
+
+    Thinking-Bloecke werden uebersprungen, sodass der zurueckgegebene String
+    nur den fuer den FILE-Block-Parser relevanten Modell-Output enthaelt.
+    """
+    parts = []
+    for block in getattr(resp, "content", None) or []:
+        if getattr(block, "type", None) == "text":
+            parts.append(getattr(block, "text", ""))
+    return "".join(parts)
+
+
+def generate_completion(
+    client: Any,
+    *,
+    provider: str,
+    model: str,
+    prompt: str,
+    reasoning_effort: str,
+    max_output_tokens: int,
+) -> str:
+    """Einheitlicher LLM-Aufruf ueber Provider hinweg; liefert reinen Text.
+
+    OpenAI nutzt die Responses-API mit ``reasoning.effort``; Anthropic nutzt
+    die Messages-API und mappt ``reasoning_effort`` auf ein Extended-Thinking-
+    Budget. Beide Pfade liefern denselben Text-Vertrag wie zuvor
+    ``resp.output_text``.
+    """
+    if provider == "openai":
+        resp = client.responses.create(
+            model=model,
+            input=prompt,
+            reasoning={"effort": reasoning_effort},
+        )
+        return resp.output_text
+
+    if provider == "anthropic":
+        thinking_budget = _ANTHROPIC_THINKING_BUDGET.get(reasoning_effort, 0)
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_output_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if thinking_budget > 0:
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+            # Anthropic verlangt max_tokens > budget_tokens.
+            if kwargs["max_tokens"] <= thinking_budget:
+                kwargs["max_tokens"] = thinking_budget + max_output_tokens
+        resp = client.messages.create(**kwargs)
+        return _anthropic_response_text(resp)
+
+    raise ValueError(f"Unknown LLM provider: {provider!r} (expected 'openai' or 'anthropic').")
