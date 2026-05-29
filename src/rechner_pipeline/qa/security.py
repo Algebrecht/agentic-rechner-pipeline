@@ -13,7 +13,6 @@ DANGEROUS_IMPORT_ROOTS = {
     "http": "network access",
     "httpx": "network access",
     "importlib": "dynamic import",
-    "os": "filesystem/process access",
     "pathlib": "filesystem access",
     "requests": "network access",
     "runpy": "dynamic execution",
@@ -22,6 +21,25 @@ DANGEROUS_IMPORT_ROOTS = {
     "subprocess": "subprocess execution",
     "tempfile": "filesystem access",
     "urllib": "network access",
+}
+
+# `import os` allein ist harmlos -- gefährlich sind erst konkrete Calls
+# (os.system, os.remove, os.popen, ...), die weiterhin über DANGEROUS_CALL_
+# PREFIXES blockiert werden. Reine os.path-Stringfunktionen führen KEIN
+# Dateisystem-I/O aus (sie rechnen nur auf Pfad-Strings) und werden daher
+# explizit erlaubt -- das ist präziser, nicht schwächer.
+SAFE_CALL_NAMES = {
+    "os.path.join",
+    "os.path.dirname",
+    "os.path.basename",
+    "os.path.abspath",
+    "os.path.normpath",
+    "os.path.split",
+    "os.path.splitext",
+    "os.path.relpath",
+    "os.path.commonpath",
+    "os.path.commonprefix",
+    "os.fspath",
 }
 
 DANGEROUS_BUILTIN_CALLS = {
@@ -212,6 +230,8 @@ class _SecurityVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _check_call(self, node: ast.Call, name: str) -> None:
+        if name in SAFE_CALL_NAMES:
+            return
         root = name.split(".", 1)[0]
         builtin_reason = DANGEROUS_BUILTIN_CALLS.get(name)
         if builtin_reason:

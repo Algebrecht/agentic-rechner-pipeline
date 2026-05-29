@@ -38,28 +38,53 @@ def test_static_security_allows_plain_calculation_and_sys_import() -> None:
 
 def test_static_security_detects_dangerous_imports_and_calls() -> None:
     source = (
-        "import os\n"
         "import requests as rq\n"
         "from pathlib import Path\n"
         "from subprocess import run as run_process\n"
+        "import os\n"
         "eval('1 + 1')\n"
         "exec('x = 1')\n"
         "open('secret.txt')\n"
         "run_process(['echo', 'x'])\n"
         "Path('secret.txt').read_text()\n"
         "rq.get('https://example.invalid')\n"
+        "os.system('id')\n"
     )
 
     violations = scan_python_source(source, Path("test_run_advanced.py"))
     symbols = {item.symbol for item in violations}
     categories = {item.category for item in violations}
 
-    assert {"os", "requests", "pathlib", "subprocess"} <= symbols
+    assert {"requests", "pathlib", "subprocess"} <= symbols
     assert {"eval", "exec", "open"} <= symbols
     assert "subprocess.run" in symbols
     assert "pathlib.Path.read_text" in symbols
     assert "requests.get" in symbols
+    # `import os` allein ist nun erlaubt; ein gefährlicher os-Call bleibt geblockt.
+    assert "os" not in symbols
+    assert "os.system" in symbols
     assert {"dangerous_import", "dangerous_call", "filesystem_access"} <= categories
+
+
+def test_static_security_allows_os_path_string_ops() -> None:
+    # Muster aus generiertem commutation.py: Pfad zur tafeln.xml bauen.
+    source = (
+        "import os\n"
+        "def _tafeln_xml_path():\n"
+        "    here = os.path.dirname(os.path.abspath(__file__))\n"
+        "    return os.path.join(here, 'tafeln.xml')\n"
+    )
+
+    assert scan_python_source(source, Path("commutation.py")) == []
+
+
+def test_static_security_still_blocks_dangerous_os_calls() -> None:
+    source = "import os\nos.system('id')\nos.remove('x')\nos.popen('ls')\n"
+
+    symbols = {item.symbol for item in scan_python_source(source, Path("x.py"))}
+
+    assert "os" not in symbols  # bloßer Import nicht mehr geflaggt
+    assert {"os.system", "os.remove", "os.popen"} <= symbols
 
 
 def test_static_security_reports_syntax_errors() -> None:
