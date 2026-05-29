@@ -12,6 +12,11 @@ vorlagen. **Kein** Teil der Laufzeit-/Pipeline-Logik — reine Doku.
   `qa/security.py`), werden mit dem Kreis (insb. Alexander) abgestimmt, bevor
   sie `Angenommen` werden.
 
+## Sessions
+
+- [SESSION-2026-05-29](SESSION-2026-05-29.md) — Multiplattform (Excel-frei),
+  Anthropic-Provider, festes Golden-Master-Orakel, agentische Konvergenz.
+
 ## Index
 
 - [CR-001](CR-001-llm-provider-subscription-auth.md) — LLM-Calls über
