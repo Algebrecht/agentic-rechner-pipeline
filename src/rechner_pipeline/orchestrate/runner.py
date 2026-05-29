@@ -85,7 +85,7 @@ class PipelineOptions:
     reasoning_effort: str
     strict_manifest_warnings: bool = False
     provider: str = "openai"
-    max_output_tokens: int = 16_000
+    max_output_tokens: int = 32_000
     export_backend: str = "openpyxl"
 
 
@@ -395,6 +395,10 @@ class PipelineRunner:
             reasoning_effort=self.options.reasoning_effort,
             max_output_tokens=self.options.max_output_tokens,
         )
+        debug_output_path = self.repo_root / "DEBUG_first_llm_output.txt"
+        write_text(debug_output_path, llm_output)
+        print(f"[DEBUG] First LLM output written to: {debug_output_path} "
+              f"({len(llm_output):,} chars)")
         main_output_items = validate_main_output_files(llm_output)
         self._run_static_security_check_for_items(main_output_items)
         write_main_output_items_to_generated_dir(main_output_items, self.repo_root)
@@ -500,6 +504,10 @@ class PipelineRunner:
             reasoning_effort=self.options.reasoning_effort,
             max_output_tokens=self.options.max_output_tokens,
         )
+        debug_output_path = self.repo_root / "DEBUG_second_llm_output.txt"
+        write_text(debug_output_path, llm_output)
+        print(f"[DEBUG] Second LLM output written to: {debug_output_path} "
+              f"({len(llm_output):,} chars)")
         extracted = extract_test_run_advanced(llm_output)
         if extracted is None:
             raise RuntimeError("Could not find test_run_advanced.py block in LLM output.")

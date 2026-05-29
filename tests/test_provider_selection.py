@@ -148,6 +148,30 @@ def test_generate_completion_anthropic_bumps_max_tokens_above_budget():
     assert client.captured["max_tokens"] == 12288 + 8_000
 
 
+class _FakeTruncatedMessages:
+    def create(self, **kwargs):
+        msg = _FakeMessage([_FakeBlock("text", "===FILE_START: x===")])
+        msg.stop_reason = "max_tokens"
+        return msg
+
+
+class _FakeTruncatedAnthropicClient:
+    def __init__(self) -> None:
+        self.messages = _FakeTruncatedMessages()
+
+
+def test_generate_completion_anthropic_truncation_raises():
+    with pytest.raises(RuntimeError, match="truncated"):
+        generate_completion(
+            _FakeTruncatedAnthropicClient(),
+            provider="anthropic",
+            model="claude-sonnet-4-6",
+            prompt="P",
+            reasoning_effort="low",
+            max_output_tokens=8,
+        )
+
+
 def test_generate_completion_unknown_provider_raises():
     with pytest.raises(ValueError):
         generate_completion(

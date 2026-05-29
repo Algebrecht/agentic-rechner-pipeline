@@ -158,6 +158,13 @@ def generate_completion(
             if kwargs["max_tokens"] <= thinking_budget:
                 kwargs["max_tokens"] = thinking_budget + max_output_tokens
         resp = client.messages.create(**kwargs)
+        if getattr(resp, "stop_reason", None) == "max_tokens":
+            raise RuntimeError(
+                "Anthropic response was truncated at max_output_tokens "
+                f"({kwargs['max_tokens']}). The output contract (FILE_START/"
+                "FILE_END blocks) is therefore incomplete. Increase "
+                "--max_output_tokens and re-run."
+            )
         return _anthropic_response_text(resp)
 
     raise ValueError(f"Unknown LLM provider: {provider!r} (expected 'openai' or 'anthropic').")

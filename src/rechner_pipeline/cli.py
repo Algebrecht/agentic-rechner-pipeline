@@ -40,7 +40,7 @@ def _add_common_options(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--max_output_tokens",
         type=int,
-        default=16_000,
+        default=32_000,
         help="Max. Output-Tokens (nur Anthropic; OpenAI Responses ignoriert dies)",
     )
     ap.add_argument(
