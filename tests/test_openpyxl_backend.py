@@ -86,13 +86,13 @@ def test_export_all_sheets_csv_schema(tmp_path: Path):
     assert rows[0] == ["Blatt", "Adresse", "Formel", "Wert"]
 
     by_addr = {r[1]: r for r in rows[1:]}
-    # Literale: Formel == Wert
-    assert by_addr["A1"] == ["Blatt1", "A1", "Label", "Label"]
-    assert by_addr["B1"] == ["Blatt1", "B1", "5", "5"]
+    # Adressen in absoluter $-Form (wie COM), Literale: Formel == Wert
+    assert by_addr["$A$1"] == ["Blatt1", "$A$1", "Label", "Label"]
+    assert by_addr["$B$1"] == ["Blatt1", "$B$1", "5", "5"]
     # Formelzelle: Formel beginnt mit '='
-    assert by_addr["B2"][2] == "=B1+1"
+    assert by_addr["$B$2"][2] == "=B1+1"
     # Leere Zelle nicht enthalten
-    assert "A2" not in by_addr
+    assert "$A$2" not in by_addr
 
 
 def test_export_name_manager_resolves_single_cell_value(tmp_path: Path):

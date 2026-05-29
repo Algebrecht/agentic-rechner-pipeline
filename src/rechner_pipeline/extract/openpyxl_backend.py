@@ -106,7 +106,11 @@ def export_one_sheet(ws_formula, ws_value, sheet_name: str, out_dir: Path) -> Op
                 if is_empty_text(formula_txt) and is_empty_text(value_txt):
                     continue
 
-                writer.writerow([sheet_name, cell.coordinate, formula_txt, value_txt])
+                # Absolute A1-Adresse ($K$6) wie der COM-Pfad. Wichtig: der
+                # nachgelagerte Scalar-/Table-Extraktor schlägt Werte über die
+                # $-Form nach -- ohne $ blieben alle Erwartungswerte null.
+                addr = f"${cell.column_letter}${cell.row}"
+                writer.writerow([sheet_name, addr, formula_txt, value_txt])
                 wrote_any = True
 
     if not wrote_any:
