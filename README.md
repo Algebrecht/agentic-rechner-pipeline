@@ -4,23 +4,26 @@
 
 ## Schnellstart
 
-Voraussetzungen für einen vollständigen Demo-Lauf: **Windows mit installiertem
-Microsoft Excel**, **Python 3.12 oder neuer**, und ein gültiger
-**`OPENAI_API_KEY`**.
+Voraussetzungen für einen vollständigen Demo-Lauf: **Python 3.12 oder neuer**
+und ein gültiger LLM-API-Key (`OPENAI_API_KEY` **oder** `ANTHROPIC_API_KEY`).
+Die Excel-Extraktion läuft standardmäßig **plattformneutral ohne Microsoft
+Excel** (openpyxl + oletools) und damit auf Windows, macOS und Linux. Das
+Legacy-Backend über Excel-COM (`--export-backend com`) bleibt für Windows
+verfügbar.
 
-```powershell
+```bash
 git clone https://github.com/bartlmac/rechner-pipeline.git
 cd rechner-pipeline
 
 python -m venv .venv
-.venv\Scripts\activate
+. .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-copy .env.example .env
-# OPENAI_API_KEY in .env eintragen
+cp .env.example .env          # API-Key bzw. *_FILE-Pointer eintragen (s. u.)
 
-python pipeline.py            # klassischer Lauf
-python agentic_pipeline.py    # LangGraph-Variante mit Quality-Gates
+python pipeline.py                          # OpenAI (Default)
+python pipeline.py --provider anthropic     # Anthropic (Claude)
+python agentic_pipeline.py                  # LangGraph-Variante mit Quality-Gates
 ```
 
 `requirements.txt` ist bewusst nur ein dünner Verweis auf
@@ -65,9 +68,18 @@ Manifest-Zusammenfassung, Prompt- und Output-Hashes, erzeugte Dateien,
 Testsummary, Manifest-Warnungen und abgeleitete offene Annahmen für die
 menschliche Kontrolle.
 
-Einmalige Excel-Einstellung: **Datei → Optionen → Trust Center → Einstellungen für das Trust Center → Einstellungen für Makros → „Zugriff auf das VBA-Projektobjektmodell vertrauen"**.
-
-> **Hinweis zur Plattform:** Die Pipeline nutzt aktuell `pywin32` und ist dadurch auf Windows + Excel beschränkt. Eine plattformneutrale Extraktionsschiene (z. B. via `openpyxl`) ist Teil der weiteren Arbeit.
+> **Hinweis zur Plattform:** Die Extraktion läuft standardmäßig
+> plattformneutral ohne Microsoft Excel (Backend `openpyxl`: Zellformeln +
+> gecachte Werte und Defined Names via openpyxl, VBA-Quellcode via
+> `oletools.olevba`). Damit ist die Pipeline auf Windows, macOS und Linux
+> lauffähig. Das frühere COM-Backend bleibt als `--export-backend com`
+> erhalten (nur Windows + installiertes Excel; einmalige Einstellung dort:
+> **Datei → Optionen → Trust Center → Makroeinstellungen → „Zugriff auf das
+> VBA-Projektobjektmodell vertrauen"**).
+>
+> Der Excel-freie Pfad liest die von Excel zuletzt **gespeicherten** (gecachten)
+> Zellwerte statt live neu zu rechnen — für statische, berechnet gespeicherte
+> Arbeitsmappen äquivalent und reproduzierbarer.
 
 > **Hinweis zu den Beispieldaten:** Demo-Artefakte liegen unter `examples/`. `Tarifrechner_KLV.xlsm` und `Tarifrechner_Pipeline.pptx` sind synthetische Lehrbeispiele ohne realen Kundenbezug.
 
@@ -197,12 +209,53 @@ Extras kombiniert:
 
 ```powershell
 pip install -e ".[llm]"                    # OpenAI Responses API
-pip install -e ".[export]"                 # Excel-Export, pandas + pywin32 auf Windows
+pip install -e ".[anthropic]"              # Anthropic Messages API (Claude)
+pip install -e ".[export]"                 # Excel-frei: openpyxl + oletools + pandas (pywin32 nur auf Windows)
 pip install -e ".[llm,export]"             # klassische Pipeline
 pip install -e ".[llm,export,agentic]"     # klassische und agentische Pipeline
 pip install -e ".[all]"                    # alle Laufzeit-Extras
 pip install -e ".[all,dev]"                # Laufzeit plus Tests
 ```
+
+### LLM-Provider wählen (OpenAI oder Anthropic)
+
+Standardprovider ist OpenAI. Über `--provider anthropic` läuft die
+LLM-Generierung stattdessen gegen die Anthropic-Messages-API (Claude). Der
+Modellname wird je Provider sinnvoll vorbelegt (`openai` → `gpt-5.2`,
+`anthropic` → `claude-sonnet-4-6`) und ist über `--model` überschreibbar.
+`--reasoning_effort` steuert bei Anthropic das Extended-Thinking-Budget
+(`low` = aus, `medium`/`high` = wachsendes Budget).
+
+```bash
+pip install -e ".[anthropic]"
+# ANTHROPIC_API_KEY als echte Umgebungsvariable oder in .env (Repo-Root) setzen
+python pipeline.py --provider anthropic
+python pipeline.py --provider anthropic --model claude-opus-4-8 --reasoning_effort high
+```
+
+Der `.env`-Loader behandelt `ANTHROPIC_API_KEY` genauso wie `OPENAI_API_KEY`:
+echte Umgebungsvariablen haben Vorrang vor `.env`-Werten.
+
+### Secrets über Pointer-Datei (empfohlen)
+
+Damit der API-Key nicht in `.env` oder einer persistenten Host-Variable
+liegt, unterstützt der Loader die `*_FILE`-Konvention: Der Key wird in eine
+restriktiv berechtigte Datei außerhalb des Repos gelegt, und `.env` enthält
+nur den **Pointer** darauf. Der Key wird zur Laufzeit direkt an den
+SDK-Konstruktor übergeben und landet nicht in `os.environ`.
+
+```bash
+# Secret-Datei mit eingeschränktem Zugriff anlegen
+install -m 600 /dev/null ~/.secrets/anthropic_api_key
+printf '%s' 'sk-ant-...' > ~/.secrets/anthropic_api_key
+
+# .env enthält nur den Pointer, kein Geheimnis:
+#   ANTHROPIC_API_KEY_FILE=/home/<user>/.secrets/anthropic_api_key
+```
+
+Auflösungsreihenfolge je Key: (1) echte Umgebungsvariable `<KEY>`,
+(2) `<KEY>_FILE` → Inhalt der Pointer-Datei. Gilt für `OPENAI_API_KEY` und
+`ANTHROPIC_API_KEY` gleichermaßen.
 
 `pywin32` ist mit einem Windows-Plattformmarker versehen. Auf anderen
 Plattformen lassen sich Basisinstallation, CLI-Hilfe und Tests für reine
@@ -234,12 +287,16 @@ Hinweis:
 ## Wichtige Hinweise
 
 - Voraussetzungen für den Export:
-  - Windows + installiertes Microsoft Excel
-  - Excel Einstellungen: Datei -> Optionen -> Trust Center -> Einstellungen für das Trust Center -> Einstellungen für Makros -> „Zugriff auf das VBA-Projektobjektmodell vertrauen“
+  - **Default (`openpyxl`):** plattformneutral, kein Excel — nur die Pakete
+    aus dem `export`-Extra (`openpyxl`, `oletools`, `pandas`).
+  - **Legacy (`--export-backend com`):** Windows + installiertes Microsoft
+    Excel; einmalige Excel-Einstellung: Datei -> Optionen -> Trust Center ->
+    Makroeinstellungen -> „Zugriff auf das VBA-Projektobjektmodell vertrauen“.
   - Python-Pakete laut `pyproject.toml`, für den Schnellstart installiert über `pip install -r requirements.txt`
-- Für LLM-Schritte muss `OPENAI_API_KEY` gesetzt sein; entweder als echte
-  Umgebungsvariable oder in der automatisch geladenen Datei `.env` im
-  Repository-Root (siehe `.env.example`).
+- Für LLM-Schritte muss je nach Provider `OPENAI_API_KEY` bzw.
+  `ANTHROPIC_API_KEY` gesetzt sein — als echte Umgebungsvariable, in der
+  automatisch geladenen Datei `.env` im Repo-Root, oder via `*_FILE`-Pointer
+  auf eine Secret-Datei (siehe „Secrets über Pointer-Datei").
 - Die generierten Verzeichnisse `generated/` und `info_from_excel/` werden bei jedem Lauf neu erzeugt und sind nicht zu pflegen.
 
 ## Strukturelles Refactor (parallel)

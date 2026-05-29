@@ -589,17 +589,12 @@ def compress_exported_csvs(
     return replacements
 
 
-def export_excel_infos(
+def _export_raw_com(
     excel_path: Path,
     out_dir: Path,
-    save_manifest_json: bool = True,
-) -> Dict[str, Any]:
-    if not excel_path.exists():
-        raise FileNotFoundError(f"Excel file not found: {excel_path}")
-
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
+    warnings: List[Dict[str, Any]],
+) -> Tuple[List[Path], List[Path], Optional[Path]]:
+    """Roh-Extraktion via Excel-COM (Legacy-Backend, nur Windows + Excel)."""
     excel = _dispatch_excel_application()
     excel.Visible = False
     excel.DisplayAlerts = False
@@ -613,68 +608,10 @@ def export_excel_infos(
             UpdateLinks=0,
             AddToMru=False,
         )
-
-        warnings: List[Dict[str, Any]] = []
-
         sheet_csvs = export_all_sheets(wb, out_dir)
         vba_txts = export_vba_modules_to_txt(wb, out_dir, warnings=warnings)
         nm_csv = export_name_manager_to_csv(wb, out_dir)
-        replacements = compress_exported_csvs(sheet_csvs, out_dir, warnings=warnings)
-
-        llm_sheet_csvs: List[Path] = []
-        for p in sheet_csvs:
-            rep = replacements.get(str(p))
-            llm_sheet_csvs.append(Path(rep) if rep else p)
-
-        llm_inputs: List[Path] = []
-        llm_inputs.extend(llm_sheet_csvs)
-        if nm_csv is not None:
-            llm_inputs.append(nm_csv)
-        llm_inputs.extend(vba_txts)
-
-        all_outputs_set = set()
-        all_outputs_set.update(sheet_csvs)
-        all_outputs_set.update(Path(v) for v in replacements.values())
-        all_outputs_set.update(vba_txts)
-        if nm_csv is not None:
-            all_outputs_set.add(nm_csv)
-
-        manifest: Dict[str, Any] = {
-            "out_dir": str(out_dir),
-            "sheet_csvs": [str(p) for p in sheet_csvs],
-            "vba_txts": [str(p) for p in vba_txts],
-            "names_manager_csv": str(nm_csv) if nm_csv is not None else "",
-            "replacements": replacements,
-            "llm_inputs": [str(p) for p in llm_inputs],
-            "all_outputs": [str(p) for p in sorted(all_outputs_set, key=lambda x: str(x))],
-            "warnings": warnings,
-            "prompt_runs": [],
-            "output_hashes": [],
-        }
-
-        print("\n[INFO] Extracting scalars and table values from compressed metadata...")
-        from rechner_pipeline.extract.scalar_table import extract_all_pairs_in_info_dir
-
-        scalar_warnings = extract_all_pairs_in_info_dir(out_dir)
-        warnings.extend(scalar_warnings)
-        scalar_files = sorted(out_dir.glob("*_scalar.json"), key=lambda p: p.name)
-        table_files = sorted(out_dir.glob("*_table_values.csv"), key=lambda p: p.name)
-        for p in scalar_files + table_files:
-            manifest["all_outputs"].append(str(p))
-        print(f"[OK] Scalars generated: {len(scalar_files)}")
-        print(f"[OK] Table values generated: {len(table_files)}")
-        print(f"\n[DONE] Output written to: {out_dir}")
-
-        if save_manifest_json:
-            manifest_path = out_dir / "export_manifest.json"
-            manifest_path.write_text(
-                json.dumps(manifest, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-                newline="\n",
-            )
-            manifest["all_outputs"].append(str(manifest_path))
-
-        return manifest
+        return sheet_csvs, vba_txts, nm_csv
     finally:
         if wb is not None:
             try:
@@ -685,3 +622,97 @@ def export_excel_infos(
             excel.Quit()
         except Exception:
             pass
+
+
+def export_excel_infos(
+    excel_path: Path,
+    out_dir: Path,
+    save_manifest_json: bool = True,
+    backend: str = "openpyxl",
+) -> Dict[str, Any]:
+    """Extrahiere Excel-Artefakte und baue das Export-Manifest.
+
+    ``backend`` waehlt die Roh-Extraktion:
+
+    * ``"openpyxl"`` (Default) -- plattformneutral, ohne Excel/COM
+      (openpyxl + oletools).
+    * ``"com"`` -- Legacy via Excel-COM (nur Windows + installiertes Excel).
+
+    Die nachgelagerte Verarbeitung (Komprimierung, Scalars, Manifest) ist
+    backend-unabhaengig.
+    """
+    if not excel_path.exists():
+        raise FileNotFoundError(f"Excel file not found: {excel_path}")
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    warnings: List[Dict[str, Any]] = []
+
+    if backend == "openpyxl":
+        from rechner_pipeline.extract.openpyxl_backend import export_raw
+
+        sheet_csvs, vba_txts, nm_csv = export_raw(excel_path, out_dir, warnings)
+    elif backend == "com":
+        sheet_csvs, vba_txts, nm_csv = _export_raw_com(excel_path, out_dir, warnings)
+    else:
+        raise ValueError(
+            f"Unknown export backend: {backend!r} (expected 'openpyxl' or 'com')."
+        )
+
+    replacements = compress_exported_csvs(sheet_csvs, out_dir, warnings=warnings)
+
+    llm_sheet_csvs: List[Path] = []
+    for p in sheet_csvs:
+        rep = replacements.get(str(p))
+        llm_sheet_csvs.append(Path(rep) if rep else p)
+
+    llm_inputs: List[Path] = []
+    llm_inputs.extend(llm_sheet_csvs)
+    if nm_csv is not None:
+        llm_inputs.append(nm_csv)
+    llm_inputs.extend(vba_txts)
+
+    all_outputs_set = set()
+    all_outputs_set.update(sheet_csvs)
+    all_outputs_set.update(Path(v) for v in replacements.values())
+    all_outputs_set.update(vba_txts)
+    if nm_csv is not None:
+        all_outputs_set.add(nm_csv)
+
+    manifest: Dict[str, Any] = {
+        "out_dir": str(out_dir),
+        "sheet_csvs": [str(p) for p in sheet_csvs],
+        "vba_txts": [str(p) for p in vba_txts],
+        "names_manager_csv": str(nm_csv) if nm_csv is not None else "",
+        "replacements": replacements,
+        "llm_inputs": [str(p) for p in llm_inputs],
+        "all_outputs": [str(p) for p in sorted(all_outputs_set, key=lambda x: str(x))],
+        "warnings": warnings,
+        "prompt_runs": [],
+        "output_hashes": [],
+    }
+
+    print("\n[INFO] Extracting scalars and table values from compressed metadata...")
+    from rechner_pipeline.extract.scalar_table import extract_all_pairs_in_info_dir
+
+    scalar_warnings = extract_all_pairs_in_info_dir(out_dir)
+    warnings.extend(scalar_warnings)
+    scalar_files = sorted(out_dir.glob("*_scalar.json"), key=lambda p: p.name)
+    table_files = sorted(out_dir.glob("*_table_values.csv"), key=lambda p: p.name)
+    for p in scalar_files + table_files:
+        manifest["all_outputs"].append(str(p))
+    print(f"[OK] Scalars generated: {len(scalar_files)}")
+    print(f"[OK] Table values generated: {len(table_files)}")
+    print(f"\n[DONE] Output written to: {out_dir}")
+
+    if save_manifest_json:
+        manifest_path = out_dir / "export_manifest.json"
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+            newline="\n",
+        )
+        manifest["all_outputs"].append(str(manifest_path))
+
+    return manifest

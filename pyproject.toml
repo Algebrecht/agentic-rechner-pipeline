@@ -33,6 +33,8 @@ anthropic = [
 ]
 export = [
     "pandas>=2.2,<3",
+    "openpyxl>=3.1,<4",
+    "oletools>=0.60,<1",
     "pywin32>=306,<400; sys_platform == 'win32'",
 ]
 agentic = [
@@ -45,6 +47,8 @@ all = [
     "openai>=1.68,<2",
     "anthropic>=0.40,<1",
     "pandas>=2.2,<3",
+    "openpyxl>=3.1,<4",
+    "oletools>=0.60,<1",
     "pywin32>=306,<400; sys_platform == 'win32'",
     "langgraph>=0.2,<2",
 ]

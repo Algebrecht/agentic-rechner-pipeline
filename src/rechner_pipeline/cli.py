@@ -52,6 +52,17 @@ def _add_common_options(ap: argparse.ArgumentParser) -> None:
         ),
     )
 
+    ap.add_argument(
+        "--export-backend",
+        dest="export_backend",
+        default="openpyxl",
+        choices=["openpyxl", "com"],
+        help=(
+            "Excel-Extraktions-Backend: openpyxl (Default, plattformneutral, "
+            "ohne Excel) oder com (Legacy, nur Windows + Excel)"
+        ),
+    )
+
     ap.add_argument("--skip_export", action="store_true")
     ap.add_argument("--skip_main_llm", action="store_true")
     ap.add_argument("--skip_test_llm", action="store_true")
@@ -96,6 +107,7 @@ def _options_from_namespace(ns: argparse.Namespace):
         strict_manifest_warnings=ns.strict_manifest_warnings,
         provider=ns.provider,
         max_output_tokens=ns.max_output_tokens,
+        export_backend=ns.export_backend,
     )
 
 

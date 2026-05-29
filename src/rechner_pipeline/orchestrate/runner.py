@@ -86,6 +86,7 @@ class PipelineOptions:
     strict_manifest_warnings: bool = False
     provider: str = "openai"
     max_output_tokens: int = 16_000
+    export_backend: str = "openpyxl"
 
 
 class PipelineRunner:
@@ -155,6 +156,7 @@ class PipelineRunner:
                 excel_path=self.excel_path,
                 out_dir=self.out_dir,
                 save_manifest_json=True,
+                backend=self.options.export_backend,
             )
             manifest = ExportManifest.from_dict(manifest_dict)
         else:
