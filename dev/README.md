@@ -16,3 +16,6 @@ vorlagen. **Kein** Teil der Laufzeit-/Pipeline-Logik — reine Doku.
 
 - [CR-001](CR-001-llm-provider-subscription-auth.md) — LLM-Calls über
   Claude-Subscription-Auth (Agent SDK) statt gemeterter API zur Kostensenkung.
+- [CR-002](CR-002-fixed-golden-master-harness.md) — fester, reviewter
+  Golden-Master-Harness statt LLM-generiertem Test (löst Security-Idiom-Varianz,
+  Orakel-Unabhängigkeit und halbiert die Kosten pro Lauf).
