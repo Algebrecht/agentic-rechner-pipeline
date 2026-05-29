@@ -183,6 +183,12 @@ Identifiziere aus den Inputs:
 
   * `<prefix>` = Dateiname-Präfix der Erwartungsdateien (z. B. `Kalkulation`).
   * `scalars`: je `<prefix>_scalar.json` ein Dict {Skalarname → berechneter Wert}.
+  * **Vollständigkeit (kritisch):** `scalars[<prefix>]` MUSS **jeden** als
+    Einzelwert benannten Skalar enthalten (jedes Label mit `Anzahl_Zellen = 1`
+    in der komprimierten CSV bzw. jeder Skalar-Name im Name-Manager) — **auch
+    abgeleitete Raten/Parameter** (z. B. `ratzu`), **nicht nur** die
+    aktuariellen Zielgrößen. Ein fehlender erwarteter Skalar lässt die
+    Golden-Master-Validierung fehlschlagen.
   * `tables`: je `<prefix>_table_values.csv` eine Liste von Zeilen-Dicts in
     Zeilenreihenfolge; Schlüssel = Spaltenköpfe (case-sensitiv; Trennzeichen-
     Varianten wie `A_xn`/`Axn` erlaubt, Groß-/Kleinschreibung NICHT glätten).
