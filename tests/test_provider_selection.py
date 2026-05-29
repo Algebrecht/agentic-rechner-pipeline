@@ -49,19 +49,37 @@ class _FakeMessage:
         self.content = content
 
 
+class _FakeStreamCtx:
+    """Context-Manager-Attrappe für client.messages.stream(...)."""
+
+    def __init__(self, message) -> None:
+        self._message = message
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get_final_message(self):
+        return self._message
+
+
 class _FakeMessages:
     def __init__(self, captured: dict) -> None:
         self._captured = captured
 
-    def create(self, **kwargs):
+    def stream(self, **kwargs):
         self._captured.update(kwargs)
         # Thinking-Block muss ignoriert werden; nur Text-Bloecke zaehlen.
-        return _FakeMessage(
-            [
-                _FakeBlock("thinking", "internal reasoning"),
-                _FakeBlock("text", "ANTHROPIC_"),
-                _FakeBlock("text", "OUTPUT"),
-            ]
+        return _FakeStreamCtx(
+            _FakeMessage(
+                [
+                    _FakeBlock("thinking", "internal reasoning"),
+                    _FakeBlock("text", "ANTHROPIC_"),
+                    _FakeBlock("text", "OUTPUT"),
+                ]
+            )
         )
 
 
@@ -149,10 +167,10 @@ def test_generate_completion_anthropic_bumps_max_tokens_above_budget():
 
 
 class _FakeTruncatedMessages:
-    def create(self, **kwargs):
+    def stream(self, **kwargs):
         msg = _FakeMessage([_FakeBlock("text", "===FILE_START: x===")])
         msg.stop_reason = "max_tokens"
-        return msg
+        return _FakeStreamCtx(msg)
 
 
 class _FakeTruncatedAnthropicClient:

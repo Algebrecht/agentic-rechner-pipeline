@@ -157,7 +157,11 @@ def generate_completion(
             # Anthropic verlangt max_tokens > budget_tokens.
             if kwargs["max_tokens"] <= thinking_budget:
                 kwargs["max_tokens"] = thinking_budget + max_output_tokens
-        resp = client.messages.create(**kwargs)
+        # Streaming: Das Anthropic-SDK verweigert nicht-gestreamte Requests,
+        # sobald max_tokens eine potenzielle Laufzeit > 10 min impliziert.
+        # Streaming funktioniert auch fuer kleine Antworten.
+        with client.messages.stream(**kwargs) as stream:
+            resp = stream.get_final_message()
         if getattr(resp, "stop_reason", None) == "max_tokens":
             raise RuntimeError(
                 "Anthropic response was truncated at max_output_tokens "
