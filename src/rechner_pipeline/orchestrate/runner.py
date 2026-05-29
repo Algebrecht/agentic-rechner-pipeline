@@ -543,7 +543,16 @@ class PipelineRunner:
                 "Static security check blocked generated test execution. "
                 f"Structured report written to {self.static_security_report_path}"
             ) from exc
-        command = [sys.executable, str(self.test_py_path)]
+        from rechner_pipeline.qa import fs_confine
+
+        # Laufzeit-Confinement: generierter Test darf nur unterhalb des
+        # Repo-Roots lesen (Schreiben/Netz/Subprocess sind statisch verboten).
+        command = [
+            sys.executable,
+            fs_confine.__file__,
+            str(self.repo_root),
+            str(self.test_py_path),
+        ]
         completed = subprocess.run(
             command,
             cwd=str(self.generated_dir),

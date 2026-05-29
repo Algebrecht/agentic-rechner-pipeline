@@ -44,7 +44,7 @@ def test_static_security_detects_dangerous_imports_and_calls() -> None:
         "import os\n"
         "eval('1 + 1')\n"
         "exec('x = 1')\n"
-        "open('secret.txt')\n"
+        "open('secret.txt', 'w')\n"
         "run_process(['echo', 'x'])\n"
         "Path('secret.txt').read_text()\n"
         "rq.get('https://example.invalid')\n"
@@ -56,7 +56,7 @@ def test_static_security_detects_dangerous_imports_and_calls() -> None:
     categories = {item.category for item in violations}
 
     assert {"requests", "pathlib", "subprocess"} <= symbols
-    assert {"eval", "exec", "open"} <= symbols
+    assert {"eval", "exec", "open"} <= symbols  # open hier im Schreib-Modus
     assert "subprocess.run" in symbols
     assert "pathlib.Path.read_text" in symbols
     assert "requests.get" in symbols
@@ -85,6 +85,39 @@ def test_static_security_still_blocks_dangerous_os_calls() -> None:
 
     assert "os" not in symbols  # bloßer Import nicht mehr geflaggt
     assert {"os.system", "os.remove", "os.popen"} <= symbols
+
+
+def test_static_security_allows_readonly_open_and_glob() -> None:
+    # Muster aus generiertem test_run_advanced.py: erwartete Werte lesen.
+    source = (
+        "import glob\n"
+        "import os\n"
+        "import json\n"
+        "def load(info_dir):\n"
+        "    out = {}\n"
+        "    for p in sorted(glob.glob(os.path.join(info_dir, '*_scalar.json'))):\n"
+        "        with open(p, 'r', encoding='utf-8') as f:\n"
+        "            out[p] = json.load(f)\n"
+        "    return out\n"
+    )
+
+    assert scan_python_source(source, Path("test_run_advanced.py")) == []
+
+
+def test_static_security_blocks_write_open() -> None:
+    for src in (
+        "open('x.txt', 'w')\n",
+        "open('x.txt', 'a')\n",
+        "open('x.txt', mode='w')\n",
+        "open('x.txt', 'r+')\n",
+        "m = 'w'\nopen('x.txt', m)\n",  # nicht-literal -> konservativ blockiert
+    ):
+        symbols = {v.symbol for v in scan_python_source(src, Path("x.py"))}
+        assert "open" in symbols, src
+
+    # Reines Lesen ist erlaubt.
+    assert scan_python_source("open('x.txt')\n", Path("x.py")) == []
+    assert scan_python_source("open('x.txt', 'rb')\n", Path("x.py")) == []
 
 
 def test_static_security_reports_syntax_errors() -> None:

@@ -9,7 +9,6 @@ from typing import Iterable
 
 DANGEROUS_IMPORT_ROOTS = {
     "ftplib": "network access",
-    "glob": "filesystem access",
     "http": "network access",
     "httpx": "network access",
     "importlib": "dynamic import",
@@ -40,14 +39,19 @@ SAFE_CALL_NAMES = {
     "os.path.commonpath",
     "os.path.commonprefix",
     "os.fspath",
+    # Read-only Verzeichnis-Listing; Pfad-Scope via Laufzeit-Confinement.
+    "glob.glob",
+    "glob.iglob",
 }
 
 DANGEROUS_BUILTIN_CALLS = {
     "__import__": "dynamic import",
     "eval": "dynamic execution",
     "exec": "dynamic execution",
-    "open": "filesystem access",
 }
+# `open` wird gesondert behandelt: Lesen ist erlaubt (Pfad-Scope erzwingt das
+# Laufzeit-Confinement, qa.fs_confine), Schreib-/Append-Modi bleiben blockiert.
+_OPEN_WRITE_FLAGS = ("w", "a", "x", "+")
 
 FILESYSTEM_METHODS = {
     "chmod",
@@ -229,8 +233,36 @@ class _SecurityVisitor(ast.NodeVisitor):
             self._check_call(node, name)
         self.generic_visit(node)
 
+    def _is_write_open(self, node: ast.Call) -> bool:
+        mode_node = None
+        if len(node.args) >= 2:
+            mode_node = node.args[1]
+        else:
+            for kw in node.keywords:
+                if kw.arg == "mode":
+                    mode_node = kw.value
+                    break
+        if mode_node is None:
+            return False  # Default-Modus "r" -> Lesen
+        if isinstance(mode_node, ast.Constant) and isinstance(mode_node.value, str):
+            return any(flag in mode_node.value for flag in _OPEN_WRITE_FLAGS)
+        return True  # nicht-literaler Modus -> konservativ als Schreiben werten
+
     def _check_call(self, node: ast.Call, name: str) -> None:
         if name in SAFE_CALL_NAMES:
+            return
+        if name == "open":
+            if self._is_write_open(node):
+                self.violations.append(
+                    _violation(
+                        self.path,
+                        node,
+                        category="dangerous_call",
+                        symbol="open",
+                        message="Write/append open() is blocked in generated code.",
+                    )
+                )
+            # Read-Modus erlaubt; den Pfad begrenzt das Laufzeit-Confinement.
             return
         root = name.split(".", 1)[0]
         builtin_reason = DANGEROUS_BUILTIN_CALLS.get(name)
