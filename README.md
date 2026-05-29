@@ -4,7 +4,7 @@
 
 ## Schnellstart
 
-Voraussetzungen für einen vollständigen Demo-Lauf: **Python 3.12 oder neuer**
+Voraussetzungen für einen vollständigen Demo-Lauf: **Python 3.11 oder neuer**
 und ein gültiger LLM-API-Key (`OPENAI_API_KEY` **oder** `ANTHROPIC_API_KEY`).
 Die Excel-Extraktion läuft standardmäßig **plattformneutral ohne Microsoft
 Excel** (openpyxl + oletools) und damit auf Windows, macOS und Linux. Das
