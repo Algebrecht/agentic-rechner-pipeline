@@ -10,6 +10,7 @@ from rechner_pipeline.orchestrate.agentic import (
     gate_after_main_node,
     main_llm_node,
     repair_main_node,
+    test_llm_node as _test_llm_node,  # Alias: sonst sammelt pytest es als Test
 )
 from rechner_pipeline.orchestrate.runner import PipelineOptions, PipelineRunner
 
@@ -147,10 +148,39 @@ def test_main_llm_node_passes_repair_context_to_runner(
 
 
 def test_compare_gate_can_repair_test_generation_once(tmp_path: Path) -> None:
+    import dataclasses
+
     state = _state(tmp_path)
+    state["options"] = dataclasses.replace(state["options"], test_mode="llm")
     state["step_status"] = {"compare": "error"}
 
     update = gate_after_compare_node(state)
 
-    assert update["gate_decision"] == "repair"
+    assert update["gate_decision"] == "repair_test"
+
+
+def test_test_llm_node_skipped_in_fixed_mode(tmp_path: Path) -> None:
+    # fixed-Modus: kein LLM-generierter Test -> Stufe übersprungen, kein Call.
+    def fail_if_called(self, *a, **k):
+        raise AssertionError("run_test_llm darf im fixed-Modus nicht laufen")
+
+    import pytest
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(PipelineRunner, "run_test_llm", fail_if_called)
+    try:
+        update = _test_llm_node(_state(tmp_path))  # _options() default test_mode="fixed"
+    finally:
+        monkeypatch.undo()
+
+    assert update["step_status"]["test_llm"] == "skipped"
+
+
+def test_compare_gate_repairs_main_in_fixed_mode(tmp_path: Path) -> None:
+    # fixed: Compare-Fehler = Rechenkern weicht ab -> main neu generieren.
+    state = _state(tmp_path)  # _options() -> test_mode default "fixed"
+    state["step_status"] = {"compare": "error"}
+
+    update = gate_after_compare_node(state)
+
+    assert update["gate_decision"] == "repair_main"
     assert update["retries"]["compare"] == 1

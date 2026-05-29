@@ -282,7 +282,9 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
 
 def test_llm_node(state: AgenticState) -> Dict[str, Any]:
     options = state["options"]
-    if options.skip_test_llm:
+    # Im fixed-Modus gibt es keinen LLM-generierten Test (fester Harness in
+    # run_compare); die Stufe wird übersprungen.
+    if options.skip_test_llm or options.test_mode == "fixed":
         return _set_step_status(state, "test_llm", "skipped")
 
     runner = _runner_from_state(state)
@@ -364,13 +366,22 @@ def gate_after_test_node(state: AgenticState) -> Dict[str, Any]:
 def gate_after_compare_node(state: AgenticState) -> Dict[str, Any]:
     status = state.get("step_status", {}).get("compare", "pending")
     if status == "error":
+        options = state["options"]
         retries = dict(state.get("retries", {}))
         current = retries.get("compare", 0)
-        max_retries = retries.get("_max_test", 0)
+        # fixed: Compare-Fehler = der Rechenkern weicht ab -> main neu generieren
+        # (mit den Abweichungen als Repair-Kontext). llm: bisheriges Verhalten
+        # (Test-Harness reparieren).
+        if options.test_mode == "fixed":
+            max_retries = retries.get("_max_main", 0)
+            repair_target = "repair_main"
+        else:
+            max_retries = retries.get("_max_test", 0)
+            repair_target = "repair_test"
         if current < max_retries:
             retries["compare"] = current + 1
             return {
-                "gate_decision": "repair",
+                "gate_decision": repair_target,
                 "retries": retries,
             }
         return {"gate_decision": "human_review", "human_review_required": True}
@@ -470,7 +481,8 @@ def build_graph() -> Any:
         route_from_gate,
         {
             "finish": END,
-            "repair": "repair_test",
+            "repair_main": "repair_main",  # fixed-Modus: Rechenkern reparieren
+            "repair_test": "repair_test",  # llm-Modus: Test-Harness reparieren
             "human_review": "human_review",
         },
     )
