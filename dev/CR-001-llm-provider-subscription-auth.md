@@ -1,7 +1,10 @@
 # CR-001 — LLM-Calls über Claude-Subscription-Auth (Agent SDK) statt gemeterter API
 
-- **Status:** Vorschlag (Entscheidung offen)
-- **Datum:** 2026-05-29
+- **Status:** Teil-Entscheidung 2026-06-02 — **Option C (Best-of-both) verworfen**
+  (Recherche, s. Abschnitt 9). Empfehlung: **vorerst beim API-Key bleiben.**
+  Detail-Besprechung im Team noch ausstehend (Auth/Billing-Modell ist erklärungs-
+  bedürftig).
+- **Datum:** 2026-05-29 (aktualisiert 2026-06-02)
 - **Branch-Kontext:** `feat/anthropic-provider`
 - **Betroffen:** `src/rechner_pipeline/generate/client.py` (Provider/Auth), `src/rechner_pipeline/cli.py`
 - **Abstimmung:** mit Alexander / Kreis (Kosten- und Auth-Governance)
@@ -79,3 +82,35 @@ die der Workflow real braucht.
 - Use the Claude Agent SDK with your Claude plan — https://support.claude.com/en/articles/15036540
 - Agent SDK overview — https://code.claude.com/docs/en/agent-sdk/overview
 - API rate limits — https://platform.claude.com/docs/en/api/rate-limits
+
+## 8. Recherche-Ergebnis (2026-06-02): Option C verworfen
+
+Die Kernfrage (Abschnitt 5.2) ist beantwortet: **Option C existiert nicht.**
+
+**Einfach erklärt:** Es gibt zwei getrennte „Türen" zu Claude.
+- **Tür 1 — API-Key** (`sk-ant-api…`): zahlst pro Nutzung (Token), volle Feinsteuerung (`max_tokens`, Modell, Thinking). **Das nutzen wir heute.**
+- **Tür 2 — Abo** (über Claude Code / Agent SDK / `claude`-CLI, via Login/OAuth-Token): im Monatspreis bzw. einem separaten „Agent SDK Credit" enthalten, aber **weniger** Programm-Feinsteuerung.
+
+Man kann **nicht mit dem Abo durch Tür 1 gehen**: Das Standard-Python-SDK
+(`anthropic.Anthropic()` + `messages.stream()`) liest nur `ANTHROPIC_API_KEY`,
+und der Endpunkt `api.anthropic.com/v1/messages` **weist OAuth-/Abo-Tokens aktiv
+ab** ("OAuth authentication is currently not supported"). Abo-Billing ist bewusst
+auf Agent SDK / CLI beschränkt.
+
+**Konsequenz / Entscheidungsraum:**
+
+| Weg | Auth | Billing | Kontrolle |
+|---|---|---|---|
+| API-Key behalten (heute) | `ANTHROPIC_API_KEY` | pay-per-token (~0,50/Lauf) | voll |
+| Agent SDK | OAuth-Token / Login | Abo- / Agent-SDK-Kontingent | reduziert (kein direkter `max_tokens`-Knopf → Truncation neu lösen) |
+| `claude`-CLI | Login / setup-token | Abo- / Agent-SDK-Kontingent | niedrig |
+
+**Empfehlung:** vorerst **API-Key** behalten. Entschärfend: der feste Golden-
+Master-Harness (CR-002) hat die Kosten pro Lauf bereits ~halbiert (ein LLM-Call).
+Die Agent-SDK-Route lohnt nur, wenn Kosten ein reales Thema werden UND der
+Kontrollverlust akzeptabel/umschiffbar ist (am ehesten als Hybrid: Agent SDK fürs
+günstige Dev-Iterieren, API-Key für governte Läufe). **Noch im Team zu vertiefen.**
+
+Beleg: `api.anthropic.com` lehnt OAuth ab (HTTP 400 "OAuth authentication is
+currently not supported"); Claude-Code-Auth-Doku (OAuth-/AUTH_TOKEN nur CLI/Agent
+SDK); ab 15.06.2026 separates Agent-SDK-Monatskontingent.
