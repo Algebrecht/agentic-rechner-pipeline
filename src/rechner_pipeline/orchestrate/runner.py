@@ -12,6 +12,8 @@ import json
 import re
 import subprocess
 import sys
+
+from rechner_pipeline.orchestrate import wflog
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List
@@ -371,9 +373,10 @@ class PipelineRunner:
 
         debug_prompt_path = self.repo_root / "DEBUG_first_llm_prompt.txt"
         write_text(debug_prompt_path, final_prompt)
-        print("\n[DEBUG] First LLM prompt written to:")
-        print(debug_prompt_path)
-        print(f"[DEBUG] Prompt length (chars): {len(final_prompt):,}\n")
+        if not wflog.enabled():
+            print("\n[DEBUG] First LLM prompt written to:")
+            print(debug_prompt_path)
+            print(f"[DEBUG] Prompt length (chars): {len(final_prompt):,}\n")
 
         manifest = manifest.with_warnings(
             self._prompt_warnings("main_llm", stuffed_inputs)
@@ -400,8 +403,9 @@ class PipelineRunner:
         )
         debug_output_path = self.repo_root / "DEBUG_first_llm_output.txt"
         write_text(debug_output_path, llm_output)
-        print(f"[DEBUG] First LLM output written to: {debug_output_path} "
-              f"({len(llm_output):,} chars)")
+        if not wflog.enabled():
+            print(f"[DEBUG] First LLM output written to: {debug_output_path} "
+                  f"({len(llm_output):,} chars)")
         main_output_items = validate_main_output_files(llm_output)
         self._run_static_security_check_for_items(main_output_items)
         write_main_output_items_to_generated_dir(main_output_items, self.repo_root)
@@ -574,7 +578,8 @@ class PipelineRunner:
             check=False,
         )
         if completed.stdout:
-            print(completed.stdout, end="")
+            if not wflog.enabled():
+                print(completed.stdout, end="")
         if completed.stderr:
             print(completed.stderr, end="", file=sys.stderr)
 

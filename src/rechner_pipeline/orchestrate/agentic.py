@@ -15,6 +15,7 @@ Ergänzt:
 from __future__ import annotations
 
 import json
+import re
 import traceback
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -244,11 +245,46 @@ def _repair_node(state: AgenticState, target_step: str) -> Dict[str, Any]:
     return update
 
 
+from rechner_pipeline.orchestrate import wflog
+
+
+def _iteration_no(state: AgenticState) -> int:
+    return int(state.get("retries", {}).get("compare", 0)) + 1
+
+
+def _compare_summary(runner: PipelineRunner):
+    """(Abweichungszahl, [Abweichungs-Zeilen]) aus dem Compare-Ergebnis lesen."""
+    path = runner.compare_result_path
+    if not path.exists():
+        return 0, []
+    try:
+        stdout = json.loads(path.read_text(encoding="utf-8")).get("stdout", "")
+    except (OSError, json.JSONDecodeError):
+        return 0, []
+    n, devs = 0, []
+    for ln in stdout.splitlines():
+        t = ln.strip()
+        if t.startswith("ABWEICHUNG:"):
+            devs.append(t.replace("ABWEICHUNG:", "").strip())
+        m = re.match(r"Abweichungen:\s*(\d+)", t)
+        if m:
+            n = int(m.group(1))
+    return n, devs
+
+
 def prepare_node(state: AgenticState) -> Dict[str, Any]:
     runner = _runner_from_state(state)
     try:
         runner.assert_required_files()
-        manifest = runner.prepare_manifest()
+        wflog.phase("Auslesen", "Excel/VBA ohne Excel in Artefakte überführen")
+        if wflog.enabled():
+            import contextlib
+            import io
+            with contextlib.redirect_stdout(io.StringIO()):
+                manifest = runner.prepare_manifest()
+        else:
+            manifest = runner.prepare_manifest()
+        wflog.detail(f"{len(manifest.llm_inputs)} Eingabe-Artefakte für das Modell abgeleitet")
         update: Dict[str, Any] = {"manifest": manifest, "failed_step": None}
         update.update(_set_step_status(state, "prepare", "ok"))
         return update
@@ -265,11 +301,13 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
 
     runner = _runner_from_state(state)
     manifest = state["manifest"]
+    repair = state.get("repair_contexts", {}).get("main_llm")
+    wflog.iteration(_iteration_no(state),
+                    "Rechenkern erzeugen" + (" (mit Korrektur-Kontext)" if repair else ""))
     try:
-        manifest = runner.run_main_llm(
-            manifest,
-            repair_context=state.get("repair_contexts", {}).get("main_llm"),
-        )
+        manifest = runner.run_main_llm(manifest, repair_context=repair)
+        n_files = len(list(runner.generated_dir.glob("*.py"))) + len(list(runner.generated_dir.glob("*.xml")))
+        wflog.detail(f"Erzeugen + Absichern: {n_files} Dateien erzeugt und statisch geprüft")
         update: Dict[str, Any] = {"manifest": manifest, "failed_step": None}
         update.update(_set_step_status(state, "main_llm", "ok"))
         update.update(_clear_repair_context(state, "main_llm"))
@@ -310,18 +348,26 @@ def compare_node(state: AgenticState) -> Dict[str, Any]:
         return _set_step_status(state, "compare", "skipped")
 
     runner = _runner_from_state(state)
+    wflog.phase("Validieren", "Vergleich gegen die Excel-Originalwerte (Golden-Master)")
     try:
         runner.run_compare()
+        wflog.ok("alle Werte stimmen mit dem Excel-Original")
         update: Dict[str, Any] = {"failed_step": None}
         update.update(_set_step_status(state, "compare", "ok"))
         return update
     except Exception as exc:
+        n, devs = _compare_summary(runner)
+        for d in devs[:4]:
+            wflog.detail(f"abweichend: {d}")
+        wflog.fail(f"{n} Abweichung(en) — Durchlauf nicht bestanden" if n
+                   else "Validierung nicht bestanden")
         update = _record_error(state, "compare", exc)
         update.update(_set_step_status(state, "compare", "error"))
         return update
 
 
 def repair_main_node(state: AgenticState) -> Dict[str, Any]:
+    wflog.detail("Korrektur: Abweichungen werden dem Modell zurückgegeben -> neue Iteration")
     return _repair_node(state, "main_llm")
 
 

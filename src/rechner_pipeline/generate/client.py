@@ -94,13 +94,40 @@ def build_anthropic_client(env_path: Path | None = None) -> Any:
     return Anthropic(api_key=api_key)
 
 
+# Replay-Index modulglobal pro Verzeichnis: der Zähler überlebt das
+# Neu-Erzeugen des Runners (und damit des Clients) über Agentik-Iterationen.
+_REPLAY_INDEX: dict[str, int] = {}
+
+
+class _ReplayClient:
+    """Liefert vorbereitete Modell-Ausgaben in Reihenfolge (für kostenfreie,
+    wiederholbare Demo-/Testläufe). Verzeichnis via RP_REPLAY_DIR; jeder Aufruf
+    gibt die nächste Datei (sortiert) zurück, letzte Datei wird wiederholt."""
+
+    def __init__(self, directory: Path) -> None:
+        self._dir = str(directory.resolve())
+        self._files = sorted(directory.glob("*.txt"))
+        if not self._files:
+            raise RuntimeError(f"RP_REPLAY_DIR enthält keine *.txt-Ausgaben: {directory}")
+
+    def next_output(self) -> str:
+        i = _REPLAY_INDEX.get(self._dir, 0)
+        _REPLAY_INDEX[self._dir] = i + 1
+        return self._files[min(i, len(self._files) - 1)].read_text(encoding="utf-8")
+
+
 def build_llm_client(provider: str, env_path: Path | None = None) -> Any:
-    """Baue den passenden Raw-Client (OpenAI oder Anthropic) nach Provider."""
+    """Baue den passenden Raw-Client (OpenAI, Anthropic oder Replay) nach Provider."""
     if provider == "openai":
         return build_openai_client(env_path=env_path)
     if provider == "anthropic":
         return build_anthropic_client(env_path=env_path)
-    raise ValueError(f"Unknown LLM provider: {provider!r} (expected 'openai' or 'anthropic').")
+    if provider == "replay":
+        directory = Path(os.environ.get("RP_REPLAY_DIR", "demo_fixtures"))
+        return _ReplayClient(directory)
+    raise ValueError(
+        f"Unknown LLM provider: {provider!r} (expected 'openai', 'anthropic' or 'replay')."
+    )
 
 
 # reasoning_effort -> Extended-Thinking-Budget (Tokens) fuer Anthropic.
@@ -137,6 +164,9 @@ def generate_completion(
     Budget. Beide Pfade liefern denselben Text-Vertrag wie zuvor
     ``resp.output_text``.
     """
+    if provider == "replay":
+        return client.next_output()
+
     if provider == "openai":
         resp = client.responses.create(
             model=model,

@@ -19,6 +19,7 @@ from pathlib import Path
 _DEFAULT_MODEL_BY_PROVIDER = {
     "openai": "gpt-5.2",
     "anthropic": "claude-sonnet-4-6",
+    "replay": "replay",
 }
 
 
@@ -26,8 +27,8 @@ def _add_common_options(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--provider",
         default="openai",
-        choices=["openai", "anthropic"],
-        help="LLM-Provider (Default: openai)",
+        choices=["openai", "anthropic", "replay"],
+        help="LLM-Provider (Default: openai; 'replay' = vorbereitete Ausgaben aus RP_REPLAY_DIR)",
     )
     ap.add_argument(
         "--model",
