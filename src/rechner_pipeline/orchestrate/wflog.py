@@ -10,11 +10,19 @@ Umgebungsvariable ``RP_WFLOG=1`` oder ``enable()``.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from typing import Iterable
 
 _ON = bool(os.environ.get("RP_WFLOG"))
 _COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+
+# Mitschrift: der Log wird zusätzlich in eine Datei geschrieben, damit der
+# Verlauf des letzten Laufs ohne erneuten (API-)Lauf ansehbar ist. Datei wird
+# beim ersten Schreiben angelegt/geleert. Pfad via RP_WFLOG_FILE.
+_FILE_PATH = os.environ.get("RP_WFLOG_FILE", "DEBUG_workflow_log.txt")
+_FILE = None  # lazily geöffnet; False = Öffnen fehlgeschlagen
+_ANSI = re.compile(r"\033\[[0-9;]*m")
 
 
 def enable(on: bool = True) -> None:
@@ -36,8 +44,18 @@ _B, _DIM, _G, _R, _C, _X = (
 
 
 def _emit(line: str = "") -> None:
-    if _ON:
-        print(line, flush=True)
+    if not _ON:
+        return
+    print(line, flush=True)
+    global _FILE
+    if _FILE is None:
+        try:
+            _FILE = open(_FILE_PATH, "w", encoding="utf-8")
+        except OSError:
+            _FILE = False
+    if _FILE:
+        _FILE.write(_ANSI.sub("", line) + "\n")
+        _FILE.flush()
 
 
 def phase(name: str, detail: str = "") -> None:
@@ -48,6 +66,11 @@ def phase(name: str, detail: str = "") -> None:
 def detail(text: str) -> None:
     """Eine inhaltliche Zeile innerhalb eines Schritts."""
     _emit(f"    {text}")
+
+
+def code(line: str) -> None:
+    """Eine wörtliche Quellcode-Zeile (eingerückt, gedimmt)."""
+    _emit(f"      {_DIM}| {line}{_X}")
 
 
 def items(label: str, values: Iterable[str], limit: int = 4) -> None:
