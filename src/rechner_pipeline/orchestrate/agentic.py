@@ -253,15 +253,16 @@ def _iteration_no(state: AgenticState) -> int:
 
 
 def _compare_summary(runner: PipelineRunner):
-    """(Abweichungszahl, [Abweichungs-Zeilen]) aus dem Compare-Ergebnis lesen."""
+    """(Abweichungszahl, [Abweichungs-Zeilen], geprüfte Werte) aus dem echten
+    Compare-Ergebnis lesen — keine festen Werte, alles aus dem Lauf."""
     path = runner.compare_result_path
     if not path.exists():
-        return 0, []
+        return 0, [], 0
     try:
         stdout = json.loads(path.read_text(encoding="utf-8")).get("stdout", "")
     except (OSError, json.JSONDecodeError):
-        return 0, []
-    n, devs = 0, []
+        return 0, [], 0
+    n, devs, tested = 0, [], 0
     for ln in stdout.splitlines():
         t = ln.strip()
         if t.startswith("ABWEICHUNG:"):
@@ -269,7 +270,9 @@ def _compare_summary(runner: PipelineRunner):
         m = re.match(r"Abweichungen:\s*(\d+)", t)
         if m:
             n = int(m.group(1))
-    return n, devs
+        for g in re.findall(r"getestet=(\d+)", t):
+            tested += int(g)
+    return n, devs, tested
 
 
 def prepare_node(state: AgenticState) -> Dict[str, Any]:
@@ -284,6 +287,9 @@ def prepare_node(state: AgenticState) -> Dict[str, Any]:
                 manifest = runner.prepare_manifest()
         else:
             manifest = runner.prepare_manifest()
+        wflog.items("Tabellenblätter", [p.stem for p in manifest.sheet_csvs])
+        if manifest.vba_txts:
+            wflog.items("VBA-Module", [p.stem for p in manifest.vba_txts])
         wflog.detail(f"{len(manifest.llm_inputs)} Eingabe-Artefakte für das Modell abgeleitet")
         update: Dict[str, Any] = {"manifest": manifest, "failed_step": None}
         update.update(_set_step_status(state, "prepare", "ok"))
@@ -306,8 +312,24 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
                     "Rechenkern erzeugen" + (" (mit Korrektur-Kontext)" if repair else ""))
     try:
         manifest = runner.run_main_llm(manifest, repair_context=repair)
-        n_files = len(list(runner.generated_dir.glob("*.py"))) + len(list(runner.generated_dir.glob("*.xml")))
-        wflog.detail(f"Erzeugen + Absichern: {n_files} Dateien erzeugt und statisch geprüft")
+        if wflog.enabled():
+            n = _iteration_no(state)
+            prompt_path = runner.repo_root / "DEBUG_first_llm_prompt.txt"
+            if prompt_path.exists():
+                ptext = prompt_path.read_text(encoding="utf-8", errors="replace")
+                keep = runner.repo_root / f"DEBUG_prompt_iteration_{n}.txt"
+                keep.write_text(ptext, encoding="utf-8")
+                wflog.detail(f"Prompt an das Modell: {len(ptext)} Zeichen"
+                             + (" inkl. Korrektur-Kontext" if repair else "")
+                             + f"  (vollständig: {keep.name})")
+            gen_files = sorted(runner.generated_dir.glob("*.py")) + sorted(runner.generated_dir.glob("*.xml"))
+            wflog.items(
+                "Erzeugte Dateien",
+                [f"{p.name} ({len(p.read_text(encoding='utf-8', errors='replace').splitlines())} Z.)"
+                 for p in gen_files],
+                limit=8,
+            )
+            wflog.detail("Hauptdateien statisch geprüft")
         update: Dict[str, Any] = {"manifest": manifest, "failed_step": None}
         update.update(_set_step_status(state, "main_llm", "ok"))
         update.update(_clear_repair_context(state, "main_llm"))
@@ -351,16 +373,20 @@ def compare_node(state: AgenticState) -> Dict[str, Any]:
     wflog.phase("Validieren", "Vergleich gegen die Excel-Originalwerte (Golden-Master)")
     try:
         runner.run_compare()
-        wflog.ok("alle Werte stimmen mit dem Excel-Original")
+        _n, _d, tested = _compare_summary(runner)
+        wflog.ok((f"{tested} Werte geprüft — alle stimmen mit dem Excel-Original")
+                 if tested else "alle Werte stimmen mit dem Excel-Original")
         update: Dict[str, Any] = {"failed_step": None}
         update.update(_set_step_status(state, "compare", "ok"))
         return update
     except Exception as exc:
-        n, devs = _compare_summary(runner)
-        for d in devs[:4]:
+        n, devs, tested = _compare_summary(runner)
+        for d in devs[:8]:
             wflog.detail(f"abweichend: {d}")
-        wflog.fail(f"{n} Abweichung(en) — Durchlauf nicht bestanden" if n
-                   else "Validierung nicht bestanden")
+        if n and tested:
+            wflog.fail(f"{n} von {tested} geprüften Werten abweichend — nicht bestanden")
+        else:
+            wflog.fail(f"{n} Abweichung(en) — nicht bestanden" if n else "Validierung nicht bestanden")
         update = _record_error(state, "compare", exc)
         update.update(_set_step_status(state, "compare", "error"))
         return update
