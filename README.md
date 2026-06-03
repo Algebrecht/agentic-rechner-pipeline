@@ -304,16 +304,22 @@ echten Lauf-Artefakten, nichts ist fest verdrahtet:
 RP_WFLOG=1 python agentic_pipeline.py --provider anthropic --test-mode fixed --max_retries_main 2
 ```
 
-Der Log wird zusaetzlich **mitgeschrieben**, sodass sich der letzte Lauf ohne
-erneuten (kostenpflichtigen) API-Aufruf wieder ansehen laesst:
+Der Log wird zusaetzlich **mitgeschrieben**, sodass sich ein Lauf ohne erneuten
+(kostenpflichtigen) API-Aufruf wieder ansehen laesst. Jeder Lauf schreibt eine
+eigene, mit **Zeitstempel** versehene Datei — aufeinanderfolgende Laeufe (z. B.
+echt vs. Replay) ueberschreiben sich also nicht:
 
 ```bash
-cat DEBUG_workflow_log.txt
+ls DEBUG_workflow_log_*.txt
+cat DEBUG_workflow_log_<zeitstempel>.txt
 ```
 
-Pfad der Mitschrift via `RP_WFLOG_FILE` (Default `DEBUG_workflow_log.txt`). Die
+Mit `RP_WFLOG_FILE` laesst sich stattdessen ein fester Pfad erzwingen. Die
 vollstaendigen Prompts jeder Iteration liegen daneben als
-`DEBUG_prompt_iteration_<n>.txt` (erster Prompt vs. Korrektur-Prompt).
+`DEBUG_prompt_iteration_<n>_<zeitstempel>.txt` (erster Prompt vs.
+Korrektur-Prompt). Der Umfang aufgelisteter Namen (Artefakte, Dateien) ist ueber
+`RP_WFLOG_MAX_ITEMS` begrenzbar (Default 12; ueberzaehlige werden als `(+N)`
+gezaehlt).
 
 ## Kostenfreie Vorfuehrung (`--provider replay`)
 

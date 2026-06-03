@@ -322,7 +322,7 @@ def prepare_node(state: AgenticState) -> Dict[str, Any]:
         wflog.items("Tabellenblätter", [p.stem for p in manifest.sheet_csvs])
         if manifest.vba_txts:
             wflog.items("VBA-Module", [p.stem for p in manifest.vba_txts])
-        wflog.detail(f"{len(manifest.llm_inputs)} Eingabe-Artefakte für das Modell abgeleitet")
+        wflog.items("Eingabe-Artefakte", [p.name for p in manifest.llm_inputs])
         update: Dict[str, Any] = {"manifest": manifest, "failed_step": None}
         update.update(_set_step_status(state, "prepare", "ok"))
         return update
@@ -349,7 +349,7 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
             prompt_path = runner.repo_root / "DEBUG_first_llm_prompt.txt"
             if prompt_path.exists():
                 ptext = prompt_path.read_text(encoding="utf-8", errors="replace")
-                keep = runner.repo_root / f"DEBUG_prompt_iteration_{n}.txt"
+                keep = runner.repo_root / f"DEBUG_prompt_iteration_{n}_{wflog.run_stamp()}.txt"
                 keep.write_text(ptext, encoding="utf-8")
                 wflog.detail(f"Prompt an das Modell: {len(ptext)} Zeichen"
                              + (" inkl. Korrektur-Kontext" if repair else "")
@@ -359,7 +359,6 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
                 "Erzeugte Dateien",
                 [f"{p.name} ({len(p.read_text(encoding='utf-8', errors='replace').splitlines())} Z.)"
                  for p in gen_files],
-                limit=8,
             )
             wflog.detail("Hauptdateien statisch geprüft")
             fname, excerpt = _code_excerpt(runner)
