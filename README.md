@@ -284,6 +284,54 @@ python agentic_pipeline.py --max_retries_main 1 --max_retries_test 1
 Hinweis:
 - Fuer den agentischen Einstieg wird das Extra `agentic` benoetigt.
 
+## Workflow-Log (`RP_WFLOG`)
+
+Standardmaessig laeuft die Pipeline technisch/still. Mit der Umgebungsvariable
+`RP_WFLOG=1` schaltet man einen **menschen-lesbaren Workflow-Log** ein, der den
+tatsaechlichen Verlauf je agentischer Iteration zeigt — ausschliesslich aus den
+echten Lauf-Artefakten, nichts ist fest verdrahtet:
+
+- **Auslesen:** ausgelesene Tabellenblaetter und VBA-Module.
+- **Erzeugen:** Groesse des an das Modell gesendeten Prompts (und ob er einen
+  Korrektur-Kontext enthaelt), die erzeugten Dateien mit Zeilenzahl, sowie in
+  der ersten Iteration ein echter Code-Auszug der Rechenlogik aus
+  `actuarial.py` (inkl. der vom Modell dokumentierten Excel-Korrespondenz, z. B.
+  `Excel K5 / VBA-Name B_xt`).
+- **Validieren:** die tatsaechlichen Abweichungen gegen den Golden-Master und —
+  bei bestandenem Lauf — die skalaren Excel-Sollwerte aus `*_scalar.json`.
+
+```bash
+RP_WFLOG=1 python agentic_pipeline.py --provider anthropic --test-mode fixed --max_retries_main 2
+```
+
+Der Log wird zusaetzlich **mitgeschrieben**, sodass sich der letzte Lauf ohne
+erneuten (kostenpflichtigen) API-Aufruf wieder ansehen laesst:
+
+```bash
+cat DEBUG_workflow_log.txt
+```
+
+Pfad der Mitschrift via `RP_WFLOG_FILE` (Default `DEBUG_workflow_log.txt`). Die
+vollstaendigen Prompts jeder Iteration liegen daneben als
+`DEBUG_prompt_iteration_<n>.txt` (erster Prompt vs. Korrektur-Prompt).
+
+## Kostenfreie Vorfuehrung (`--provider replay`)
+
+Mit dem Replay-Provider laesst sich der **echte** Pipeline-Workflow inkl.
+agentischer Korrekturschleife **kostenfrei und wiederholbar** vorfuehren — ohne
+API-Aufruf. Statt das Modell zu rufen, gibt der Provider vorbereitete
+Modell-Ausgaben aus einem Verzeichnis (`RP_REPLAY_DIR`) in Reihenfolge zurueck.
+Die mitgelieferten Fixtures unter `demo_fixtures/` lassen gezielt Skalare im
+Vertrag weg, sodass echte Abweichungen entstehen, die die Schleife real
+korrigiert (2 -> 1 -> 0):
+
+```bash
+RP_WFLOG=1 RP_REPLAY_DIR=demo_fixtures \
+  python agentic_pipeline.py --provider replay --test-mode fixed --max_retries_main 2
+```
+
+Details zu den Fixtures: `demo_fixtures/README.md`.
+
 ## Wichtige Hinweise
 
 - Voraussetzungen für den Export:
