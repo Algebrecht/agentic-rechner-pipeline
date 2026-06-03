@@ -267,16 +267,21 @@ def _scalar_targets(runner: PipelineRunner):
     return out
 
 
-def _code_excerpt(runner: PipelineRunner, n: int = 16):
-    """Anfang der Vertragsfunktion ``golden_master_outputs()`` aus den erzeugten
-    Dateien (über den festen Namen gefunden, nicht geraten). Zeigt, wie das
-    Modell die berechneten Werte verdrahtet — echter Code, kein Hardcoding."""
-    for p in sorted(runner.generated_dir.glob("*.py")):
-        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-        for i, ln in enumerate(lines):
-            if ln.lstrip().startswith("def golden_master_outputs"):
-                return p.name, lines[i:i + n]
-    return None, []
+def _code_excerpt(runner: PipelineRunner, n: int = 18):
+    """Auszug der echten Rechenlogik: ``actuarial.py`` ab der ersten
+    Funktionsdefinition (deterministisch, kein Raten). Zeigt, wie das Modell
+    eine Excel-Größe tatsächlich nachrechnet — echter Code, kein Hardcoding."""
+    path = runner.generated_dir / "actuarial.py"
+    if not path.exists():
+        cands = sorted(runner.generated_dir.glob("*.py"))
+        if not cands:
+            return None, []
+        path = cands[0]
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    for i, ln in enumerate(lines):
+        if ln.startswith("def "):
+            return path.name, lines[i:i + n]
+    return path.name, lines[:n]
 
 
 def _compare_summary(runner: PipelineRunner):
@@ -359,7 +364,7 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
             wflog.detail("Hauptdateien statisch geprüft")
             fname, excerpt = _code_excerpt(runner)
             if excerpt and n == 1:
-                wflog.detail(f"Auszug {fname} - golden_master_outputs() (Vertrag):")
+                wflog.detail(f"Auszug {fname} (Rechenlogik):")
                 for ln in excerpt:
                     wflog.code(ln)
         update: Dict[str, Any] = {"manifest": manifest, "failed_step": None}
