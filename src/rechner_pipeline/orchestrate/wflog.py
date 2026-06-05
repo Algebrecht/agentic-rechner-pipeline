@@ -26,6 +26,7 @@ _FILE_PATH = os.environ.get("RP_WFLOG_FILE")  # None = Default im Lauf-Verzeichn
 _FILE = None  # lazily geöffnet; False = Öffnen fehlgeschlagen
 _RUN_STAMP = None  # pro Prozess einmal
 _RUN_DIR = None  # pro Prozess einmal
+_START = None  # Startzeitpunkt (für Laufzeit)
 _ANSI = re.compile(r"\033\[[0-9;]*m")
 
 # Obergrenze für aufgelistete Namen (items()), damit Ausgaben auch bei sehr
@@ -42,12 +43,23 @@ def run_stamp() -> str:
     Trennt Läufe in Dateinamen (Mitschrift, per-Iteration-Prompts), damit ein
     späterer Lauf einen früheren nicht überschreibt.
     """
-    global _RUN_STAMP
+    global _RUN_STAMP, _START
     if _RUN_STAMP is None:
         from datetime import datetime
 
-        _RUN_STAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
+        now = datetime.now()
+        _RUN_STAMP = now.strftime("%Y%m%d_%H%M%S")
+        _START = now
     return _RUN_STAMP
+
+
+def elapsed() -> float:
+    """Vergangene Sekunden seit Lauf-Start (0.0 falls noch nicht gestartet)."""
+    if _START is None:
+        return 0.0
+    from datetime import datetime
+
+    return (datetime.now() - _START).total_seconds()
 
 
 def run_dir() -> Path:
@@ -140,3 +152,40 @@ def ok(text: str) -> None:
 
 def fail(text: str) -> None:
     _emit(f"  {_R}-> {text}{_X}")
+
+
+def rule(text: str = "") -> None:
+    """Trennbalken, optional mit Titel (für Abschluss-Karte etc.)."""
+    _emit(f"  {_DIM}{'-' * 58}{_X}")
+    if text:
+        _emit(f"  {_B}{text}{_X}")
+
+
+def table(headers, rows, aligns=None) -> None:
+    """Spaltenbündige Tabelle (Kopf gedimmt). ``aligns``: je Spalte 'l'/'r'."""
+    if not _ON:
+        return
+    cols = [str(h) for h in headers]
+    data = [[str(c) for c in r] for r in rows]
+    widths = [len(c) for c in cols]
+    for r in data:
+        for i, c in enumerate(r):
+            if i < len(widths):
+                widths[i] = max(widths[i], len(c))
+
+    def _row(cells):
+        parts = []
+        for i, c in enumerate(cells):
+            a = aligns[i] if aligns and i < len(aligns) else "l"
+            parts.append(c.rjust(widths[i]) if a == "r" else c.ljust(widths[i]))
+        return "  ".join(parts).rstrip()
+
+    _emit(f"    {_DIM}{_row(cols)}{_X}")
+    for r in data:
+        _emit(f"    {_row(r)}")
+
+
+def diff(sign: str, text: str) -> None:
+    """Eine Diff-Zeile: '+' grün, '-' rot, sonst gedimmt."""
+    color = _G if sign == "+" else _R if sign == "-" else _DIM
+    _emit(f"      {color}{sign} {text}{_X}")

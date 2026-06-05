@@ -87,6 +87,10 @@ class Report:
     table_cells_tested: int = 0
     unmatched_columns: List[str] = field(default_factory=list)
     deviations: List[str] = field(default_factory=list)
+    # je Skalar: (prefix, name, erwartet, berechnet, status) — für die Anzeige
+    scalar_rows: List[Tuple[str, str, Optional[float], Optional[float], str]] = field(
+        default_factory=list
+    )
 
     @property
     def ok(self) -> bool:
@@ -109,6 +113,10 @@ class Report:
             lines.append(f"    … +{len(self.deviations) - 20} weitere")
         if self.unmatched_columns:
             lines.append(f"  nicht zugeordnet: {', '.join(self.unmatched_columns[:10])}")
+        for prefix, name, ev, cv, status in self.scalar_rows:
+            lines.append(
+                f"  SKALAR: {prefix}:{name} status={status} erwartet={ev} berechnet={cv}"
+            )
         total = self.scalars_tested + self.table_cells_tested
         lines.append(
             f"  RESULT: {'ALLE ' + str(total) + ' TESTS BESTANDEN' if self.ok else 'FEHLGESCHLAGEN'}"
@@ -122,16 +130,21 @@ def _compare_scalars(expected, computed, report: Report) -> None:
         for name, ev in exp.items():
             if ev is None:
                 report.scalars_skipped += 1
+                report.scalar_rows.append((prefix, name, None, None, "kein-soll"))
                 continue
             cv = _to_float(comp.get(name))
             if cv is None:
                 report.deviations.append(f"{prefix}:{name} ohne berechneten Wert")
+                report.scalar_rows.append((prefix, name, ev, None, "fehlt"))
                 continue
             report.scalars_tested += 1
             if not _eq4(cv, ev):
                 report.deviations.append(
                     f"{prefix}:{name} berechnet={cv} erwartet={ev}"
                 )
+                report.scalar_rows.append((prefix, name, ev, cv, "abw"))
+            else:
+                report.scalar_rows.append((prefix, name, ev, cv, "ok"))
 
 
 def _compare_tables(expected, computed, report: Report) -> None:

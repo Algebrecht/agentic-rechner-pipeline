@@ -253,21 +253,6 @@ def _iteration_no(state: AgenticState) -> int:
     return int(state.get("retries", {}).get("compare", 0)) + 1
 
 
-def _scalar_targets(runner: PipelineRunner):
-    """Skalare Golden-Master-Sollwerte aus ``*_scalar.json`` (die aus Excel
-    berechneten Referenzwerte). Reines Auslesen, keine Namens-Heuristik."""
-    out = {}
-    for p in sorted(runner.out_dir.glob("*_scalar.json")):
-        try:
-            data = json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if isinstance(data, dict):
-            for k, v in data.items():
-                out[k] = v
-    return out
-
-
 def _capture_fixture(runner: PipelineRunner, n: int):
     """Modell-Ausgabe dieser Iteration als wiederverwendbares Replay-Fixture
     wegsichern: ``runs/<stamp>/fixtures/<nn>_iteration.txt``.
@@ -313,6 +298,132 @@ def _code_excerpt(runner: PipelineRunner, n: int = 18):
     return path.name, lines[:n]
 
 
+def _excel_formula_samples(runner: PipelineRunner, limit: int = 3):
+    """Ein paar echte Excel-Originalformeln aus den Sheet-CSVs
+    (Blatt;Adresse;Formel;Wert). Reines Auslesen, kein Raten."""
+    import csv
+
+    out = []
+    sheets = sorted(
+        p for p in runner.out_dir.glob("*.csv")
+        if p.name != "names_manager.csv"
+        and not p.name.endswith(("_compressed.csv", "_table_values.csv"))
+    )
+    for sheet in sheets:
+        try:
+            with sheet.open(encoding="utf-8", newline="") as f:
+                reader = csv.reader(f, delimiter=";")
+                next(reader, None)  # Kopfzeile
+                for row in reader:
+                    if len(row) >= 4 and row[2].startswith("="):
+                        addr = row[1].replace("$", "")
+                        out.append(f"{row[0]}!{addr}: {row[2]}")
+                        if len(out) >= limit:
+                            return out
+        except OSError:
+            continue
+    return out
+
+
+def _function_inventory(runner: PipelineRunner):
+    """Öffentliche Funktionsnamen aus actuarial.py — die 'API' des Rechenkerns."""
+    path = runner.generated_dir / "actuarial.py"
+    if not path.exists():
+        return []
+    names = []
+    for ln in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if ln.startswith("def "):
+            names.append(ln[4:].split("(", 1)[0])
+    return names
+
+
+def _scalar_table(runner: PipelineRunner):
+    """Soll/Ist je Skalar aus dem Compare-Ergebnis (SKALAR:-Zeilen des Harness).
+    Liefert [(name, erwartet, berechnet, status)] — echte Werte aus dem Lauf."""
+    path = runner.compare_result_path
+    if not path.exists():
+        return []
+    try:
+        stdout = json.loads(path.read_text(encoding="utf-8")).get("stdout", "")
+    except (OSError, json.JSONDecodeError):
+        return []
+    rows = []
+    for ln in stdout.splitlines():
+        t = ln.strip()
+        if not t.startswith("SKALAR:"):
+            continue
+        parts = t[len("SKALAR:"):].split()
+        if not parts:
+            continue
+        name = parts[0].split(":", 1)[-1]
+        kv = dict(p.split("=", 1) for p in parts[1:] if "=" in p)
+        rows.append((name, kv.get("erwartet"), kv.get("berechnet"), kv.get("status")))
+    return rows
+
+
+def _gm_return_block(runner: PipelineRunner):
+    """Die ganze Funktion ``golden_master_outputs()`` aus den erzeugten Dateien
+    (über den festen Namen gefunden). So findet ein Diff genau die geänderten
+    Zeilen (z. B. ergänzte Skalar-Einträge). Zeilen oder []."""
+    for p in sorted(runner.generated_dir.glob("*.py")):
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        for i, ln in enumerate(lines):
+            if ln.lstrip().startswith("def golden_master_outputs"):
+                block = [lines[i]]
+                for k in range(i + 1, len(lines)):
+                    # Funktion endet bei der nächsten Zeile auf Spalte 0
+                    if lines[k].strip() and not lines[k][0].isspace():
+                        break
+                    block.append(lines[k])
+                return block
+    return []
+
+
+def _fmt_num(s):
+    """Zahl kompakt formatieren; None/'None' -> Gedankenstrich."""
+    if s is None or s == "None":
+        return "—"
+    try:
+        return f"{float(s):.8g}"
+    except (TypeError, ValueError):
+        return str(s)
+
+
+def _delta(ev, cv):
+    try:
+        return f"{abs(float(cv) - float(ev)):.0e}"
+    except (TypeError, ValueError):
+        return "—"
+
+
+_STATUS_LABEL = {"ok": "ok", "abw": "ABW", "fehlt": "fehlt", "kein-soll": "kein Soll"}
+
+
+def _render_scalar_table(runner: PipelineRunner) -> None:
+    """Soll/Ist-Tabelle der Skalare (Excel-Soll vs. berechnet, Δ, Status)."""
+    rows = _scalar_table(runner)
+    if not rows:
+        return
+    table_rows = [
+        [name, _fmt_num(ev), _fmt_num(cv), _delta(ev, cv), _STATUS_LABEL.get(status, status)]
+        for name, ev, cv, status in rows[:12]
+    ]
+    wflog.table(
+        ["Skalar", "Excel-Soll", "berechnet", "Δ", "Status"],
+        table_rows,
+        aligns=["l", "r", "r", "r", "l"],
+    )
+
+
+def _record_convergence(runner: PipelineRunner, n: int, deviations: int, tested: int) -> None:
+    """Pro Iteration eine Zeile (n;Abweichungen;geprüft) für die Abschluss-Karte."""
+    try:
+        with (wflog.run_dir() / "convergence.csv").open("a", encoding="utf-8") as f:
+            f.write(f"{n};{deviations};{tested}\n")
+    except OSError:
+        pass
+
+
 def _compare_summary(runner: PipelineRunner):
     """(Abweichungszahl, [Abweichungs-Zeilen], geprüfte Werte) aus dem echten
     Compare-Ergebnis lesen — keine festen Werte, alles aus dem Lauf."""
@@ -352,6 +463,9 @@ def prepare_node(state: AgenticState) -> Dict[str, Any]:
         if manifest.vba_txts:
             wflog.items("VBA-Module", [p.stem for p in manifest.vba_txts])
         wflog.items("Eingabe-Artefakte", [p.name for p in manifest.llm_inputs])
+        if wflog.enabled():
+            for f in _excel_formula_samples(runner):
+                wflog.detail(f"Excel-Original  {f}")
         update: Dict[str, Any] = {"manifest": manifest, "failed_step": None}
         update.update(_set_step_status(state, "prepare", "ok"))
         return update
@@ -393,11 +507,30 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
                  for p in gen_files],
             )
             wflog.detail("Hauptdateien statisch geprüft")
+            wflog.items("Funktionen (actuarial.py)", _function_inventory(runner))
             fname, excerpt = _code_excerpt(runner)
             if excerpt and n == 1:
                 wflog.detail(f"Auszug {fname} (Rechenlogik):")
                 for ln in excerpt:
                     wflog.code(ln)
+            # Inter-Iterations-Diff von golden_master_outputs(): macht die
+            # Selbstkorrektur in echtem Code sichtbar (nutzt die erzeugten Dateien)
+            cur = _gm_return_block(runner)
+            keep_gm = wflog.run_dir() / f"gm_return_{n}.txt"
+            keep_gm.write_text("\n".join(cur), encoding="utf-8")
+            prev_gm = wflog.run_dir() / f"gm_return_{n - 1}.txt"
+            if n >= 2 and cur and prev_gm.exists():
+                import difflib
+
+                prev = prev_gm.read_text(encoding="utf-8").splitlines()
+                changed = [
+                    ln for ln in difflib.unified_diff(prev, cur, lineterm="")
+                    if ln[:1] in "+-" and not ln.startswith(("+++", "---")) and ln[1:].strip()
+                ]
+                if changed:
+                    wflog.detail(f"Änderung an golden_master_outputs() ggü. Iteration {n - 1}:")
+                    for ln in changed[:12]:
+                        wflog.diff(ln[0], ln[1:].strip())
         update: Dict[str, Any] = {"manifest": manifest, "failed_step": None}
         update.update(_set_step_status(state, "main_llm", "ok"))
         update.update(_clear_repair_context(state, "main_llm"))
@@ -439,24 +572,30 @@ def compare_node(state: AgenticState) -> Dict[str, Any]:
 
     runner = _runner_from_state(state)
     wflog.phase("Validieren", "Vergleich gegen die Excel-Originalwerte (Golden-Master)")
+    n = _iteration_no(state)
     try:
         runner.run_compare()
         _n, _d, tested = _compare_summary(runner)
-        for name, val in list(_scalar_targets(runner).items())[:8]:
-            wflog.detail(f"{name} = {val}  (Excel-Sollwert, berechnet stimmt)")
+        if wflog.enabled():
+            _render_scalar_table(runner)
+            _record_convergence(runner, n, 0, tested)
         wflog.ok((f"{tested} Werte geprüft — alle stimmen mit dem Excel-Original")
                  if tested else "alle Werte stimmen mit dem Excel-Original")
         update: Dict[str, Any] = {"failed_step": None}
         update.update(_set_step_status(state, "compare", "ok"))
         return update
     except Exception as exc:
-        n, devs, tested = _compare_summary(runner)
-        for d in devs[:8]:
-            wflog.detail(f"abweichend: {d}")
-        if n and tested:
-            wflog.fail(f"{n} von {tested} geprüften Werten abweichend — nicht bestanden")
+        dn, devs, tested = _compare_summary(runner)
+        if wflog.enabled():
+            _render_scalar_table(runner)
+            _record_convergence(runner, n, dn, tested)
+            # Tabellen-Zell-Abweichungen ergänzen (Skalare stehen in der Tabelle)
+            for d in [x for x in devs if "[" in x][:6]:
+                wflog.detail(f"abweichend: {d}")
+        if dn and tested:
+            wflog.fail(f"{dn} von {tested} geprüften Werten abweichend — nicht bestanden")
         else:
-            wflog.fail(f"{n} Abweichung(en) — nicht bestanden" if n else "Validierung nicht bestanden")
+            wflog.fail(f"{dn} Abweichung(en) — nicht bestanden" if dn else "Validierung nicht bestanden")
         update = _record_error(state, "compare", exc)
         update.update(_set_step_status(state, "compare", "error"))
         return update

@@ -158,6 +158,49 @@ def main(repo_root: Path | None = None) -> None:
     runner.run()
 
 
+def _print_summary_card(final_state, repo_root: Path) -> None:
+    """Kompakte Abschluss-Karte am Lauf-Ende (nur bei RP_WFLOG)."""
+    import json
+
+    from rechner_pipeline.orchestrate import wflog
+
+    if not wflog.enabled():
+        return
+
+    conv = []
+    cpath = wflog.run_dir() / "convergence.csv"
+    if cpath.exists():
+        for line in cpath.read_text(encoding="utf-8").splitlines():
+            parts = line.split(";")
+            if len(parts) == 3:
+                conv.append(parts)  # (n, Abweichungen, geprüft)
+
+    iters = len(conv)
+    seq = " -> ".join(d for _, d, _ in conv) if conv else "-"
+    tested = conv[-1][2] if conv else "0"
+    manifest = final_state.get("manifest")
+    n_sheets = len(manifest.sheet_csvs) if manifest else 0
+    n_scalars = 0
+    for p in (repo_root / "info_from_excel").glob("*_scalar.json"):
+        try:
+            n_scalars += len(json.loads(p.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            pass
+    passed = (
+        not final_state.get("human_review_required")
+        and final_state.get("step_status", {}).get("compare") == "ok"
+    )
+
+    wflog.rule("Zusammenfassung")
+    wflog.detail(f"Migriert: {n_sheets} Blatt/Blätter, {n_scalars} Skalare, {tested} Werte validiert")
+    wflog.detail(f"Iterationen: {iters}  (Abweichungen je Runde: {seq})")
+    wflog.detail(f"Laufzeit: {wflog.elapsed():.0f} s")
+    if passed:
+        wflog.ok("BESTANDEN — Rechenkern reproduziert die Excel-Werte")
+    else:
+        wflog.fail("nicht bestanden / Human-Review erforderlich")
+
+
 def agentic_main(repo_root: Path | None = None) -> None:
     ap = argparse.ArgumentParser(prog="rechner-pipeline-agentic")
     _add_common_options(ap)
@@ -198,6 +241,7 @@ def agentic_main(repo_root: Path | None = None) -> None:
     }
 
     final_state = app.invoke(initial_state)
+    _print_summary_card(final_state, resolved_repo_root)
     runner = PipelineRunner(
         repo_root=resolved_repo_root,
         options=args.pipeline,
