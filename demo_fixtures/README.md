@@ -123,6 +123,8 @@ jederzeit gefahrlos möglich (alles lokal, nicht im Git):
 | `RP_RUN_DIR=<dir>` | Basis der Lauf-Verzeichnisse (Default: `runs`) |
 | `RP_WFLOG_FILE=<datei>` | fester Pfad für die Mitschrift statt `runs/<stamp>/workflow_log.txt` |
 | `RP_WFLOG_MAX_ITEMS=<n>` | Obergrenze gelisteter Namen im Log (Default: 12; Rest als `(+N)`) |
+| `RP_WFLOG_TABLE_ROWS=<n>` | Zeilen im Verlaufswerte-Auszug (Default: 3; 0 = alle vorhandenen) |
+| `RP_WFLOG_TABLE_COLS=<n>` | Spalten im Verlaufswerte-Auszug (Default: 3; 0 = alle vorhandenen) |
 | `RP_CAPTURE_FIXTURES=0` | Fixture-Capture für echte Läufe abschalten |
 
 ## Einordnung (ehrlich, für die Präsentation)

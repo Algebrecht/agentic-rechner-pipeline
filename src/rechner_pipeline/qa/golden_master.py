@@ -185,8 +185,9 @@ def _compare_tables(expected, computed, report: Report) -> None:
                     status = "fehlt" if cv is None else "abw"
                 else:
                     status = "ok"
-                # kleine Stichprobe für die Anzeige (erste Zeilen, mehrere Spalten)
-                if ri < 4 and len(report.table_samples) < 12:
+                # Rohmaterial für die Anzeige (erste Zeilen, mehrere Spalten);
+                # die Begrenzung auf konkrete Zeilen/Spalten macht die Anzeige-Seite
+                if ri < 20 and len(report.table_samples) < 400:
                     report.table_samples.append((prefix, col, ri, ev, cv, status))
 
 

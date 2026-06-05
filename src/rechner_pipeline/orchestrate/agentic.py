@@ -408,6 +408,14 @@ def _gm_return_block(runner: PipelineRunner):
     return []
 
 
+def _wflog_int(name: str, default: int) -> int:
+    """Ganzzahl aus einer Umgebungsvariable; bei Fehler der Default."""
+    try:
+        return int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 def _fmt_num(s):
     """Zahl kompakt formatieren; None/'None' -> Gedankenstrich."""
     if s is None or s == "None":
@@ -445,21 +453,41 @@ def _render_scalar_table(runner: PipelineRunner) -> None:
 
 
 def _render_table_sample(runner: PipelineRunner) -> None:
-    """Auszug der Verlaufs-/Tabellenwerte als Soll/Ist-Tabelle."""
+    """Auszug der Verlaufs-/Tabellenwerte als Soll/Ist-Tabelle.
+
+    Umfang konfigurierbar: ``RP_WFLOG_TABLE_ROWS`` (Zeilen, Default 3) und
+    ``RP_WFLOG_TABLE_COLS`` (Spalten, Default 3); jeweils 0 = so viele wie
+    vorhanden.
+    """
     rows = _table_sample(runner)
     if not rows:
         return
+    max_rows = _wflog_int("RP_WFLOG_TABLE_ROWS", 3)
+    max_cols = _wflog_int("RP_WFLOG_TABLE_COLS", 3)
 
-    def _key(r):
-        ri = str(r[0])
-        return (int(ri) if ri.lstrip("-").isdigit() else 0, r[1])
+    def _ri(r):
+        s = str(r[0])
+        return int(s) if s.lstrip("-").isdigit() else 0
 
-    rows = sorted(rows, key=_key)[:9]  # zeilenweise gruppiert
+    # Spalten in Reihenfolge des ersten Auftretens (= Excel-Spaltenreihenfolge)
+    col_order = []
+    for _, col, *_ in rows:
+        if col not in col_order:
+            col_order.append(col)
+    cols = col_order if max_cols <= 0 else col_order[:max_cols]
+    row_ids = sorted({_ri(r) for r in rows})
+    row_ids = row_ids if max_rows <= 0 else row_ids[:max_rows]
+    col_set, row_set = set(cols), set(row_ids)
+
+    sel = [r for r in rows if r[1] in col_set and _ri(r) in row_set]
+    sel.sort(key=lambda r: (_ri(r), cols.index(r[1])))
+    if not sel:
+        return
     trows = [
         [ri, col, _fmt_num(ev), _fmt_num(cv), _delta(ev, cv), _STATUS_LABEL.get(st, st)]
-        for ri, col, ev, cv, st in rows
+        for ri, col, ev, cv, st in sel
     ]
-    wflog.detail("Verlaufswerte (Auszug, Soll/Ist):")
+    wflog.detail(f"Verlaufswerte (Auszug {len(row_ids)} Zeilen x {len(cols)} Spalten, Soll/Ist):")
     wflog.table(
         ["Zeile", "Spalte", "Excel-Soll", "berechnet", "Δ", "Status"],
         trows,
