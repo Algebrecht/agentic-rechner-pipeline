@@ -98,21 +98,25 @@ Ein gutes Set lässt sich als dauerhafte Demo übernehmen:
 Capture ist standardmäßig an und nur für echte Provider aktiv (bei `replay`
 wäre die Ausgabe nur die Kopie der Eingabe). Abschalten: `RP_CAPTURE_FIXTURES=0`.
 
-## Lauf-Artefakte: `runs/<zeitstempel>/`
+## Lauf-Artefakte: `runs/`
 
 Damit das Repo-Root sauber bleibt, schreibt jeder Lauf alle Artefakte in ein
-eigenes, mit Zeitstempel versehenes Verzeichnis (gitignored):
+eigenes Verzeichnis (gitignored). **Echte Läufe** akkumulieren je Lauf unter
+`runs/<zeitstempel>/`; **Demo/Replay-Läufe** landen alle im selben,
+nicht akkumulierenden `runs/demo/` (wird überschrieben) — so bleiben die echten
+Läufe sauber unterscheidbar und werden nicht von Vorführungen zugemüllt.
 
 - `workflow_log.txt` — die Mitschrift des Logs (ohne erneuten Lauf ansehbar)
 - `prompt_iteration_<n>.txt` — der vollständige Prompt je Iteration
 - `main_prompt.txt` / `main_output.txt` — Prompt und rohe Modell-Ausgabe des
   Haupt-Schritts (zuletzt); `test_*.txt` analog für den Legacy-Test-Schritt
-- `fixtures/` — das wegsicherte Replay-Set (nur echte Läufe)
+- `fixtures/` — das wegsicherte Replay-Set (**nur echte Läufe**)
 
-Aufeinanderfolgende Läufe überschreiben sich dank Zeitstempel nicht. Aufräumen
-jederzeit gefahrlos möglich (alles lokal, nicht im Git):
+Aufräumen jederzeit gefahrlos möglich (alles lokal, nicht im Git). Demos allein
+entfernen, echte Läufe behalten:
 
-    rm -r runs/
+    rm -r runs/demo            # nur die Demo-Mitschrift
+    # echte Läufe behalten ihre runs/<stamp>/ mit fixtures/
 
 ## Umgebungsvariablen (Referenz)
 

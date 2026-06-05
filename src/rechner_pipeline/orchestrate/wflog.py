@@ -27,6 +27,7 @@ _FILE = None  # lazily geöffnet; False = Öffnen fehlgeschlagen
 _RUN_STAMP = None  # pro Prozess einmal
 _RUN_DIR = None  # pro Prozess einmal
 _START = None  # Startzeitpunkt (für Laufzeit)
+_DEMO = False  # Demo/Replay-Lauf -> nicht akkumulierendes runs/demo
 _ANSI = re.compile(r"\033\[[0-9;]*m")
 
 # Obergrenze für aufgelistete Namen (items()), damit Ausgaben auch bei sehr
@@ -62,17 +63,27 @@ def elapsed() -> float:
     return (datetime.now() - _START).total_seconds()
 
 
+def set_demo(flag: bool = True) -> None:
+    """Lauf als Demo/Replay markieren. Solche Läufe landen in einem einzigen,
+    nicht akkumulierenden ``runs/demo`` (statt ``runs/<zeitstempel>``), damit die
+    echten Läufe sauber und unterscheidbar bleiben. Vor dem ersten ``run_dir()``
+    aufrufen (die CLI tut das anhand des Providers)."""
+    global _DEMO
+    _DEMO = bool(flag)
+
+
 def run_dir() -> Path:
     """Verzeichnis für alle Artefakte eines Laufs (Mitschrift, Prompts,
     Fixtures) — hält das Repo-Root sauber.
 
-    Default ``./runs/<zeitstempel>/`` (Basis via ``RP_RUN_DIR`` überschreibbar);
-    wird bei Bedarf angelegt.
+    Echte Läufe: ``./runs/<zeitstempel>/`` (akkumulieren). Demo/Replay-Läufe:
+    ``./runs/demo/`` (einmalig, wird überschrieben). Basis via ``RP_RUN_DIR``
+    überschreibbar; wird bei Bedarf angelegt.
     """
     global _RUN_DIR
     if _RUN_DIR is None:
         base = Path(os.environ.get("RP_RUN_DIR", "runs"))
-        _RUN_DIR = base / run_stamp()
+        _RUN_DIR = (base / "demo") if _DEMO else (base / run_stamp())
         try:
             _RUN_DIR.mkdir(parents=True, exist_ok=True)
         except OSError:

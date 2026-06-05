@@ -149,6 +149,8 @@ def main(repo_root: Path | None = None) -> None:
 
     resolved_repo_root = _resolve_repo_root(repo_root)
     options = _options_from_namespace(ns)
+    from rechner_pipeline.orchestrate import wflog
+    wflog.set_demo(options.provider == "replay")
     excel_path = _resolve_excel_path(ns.excel, resolved_repo_root)
     runner = PipelineRunner(
         repo_root=resolved_repo_root,
@@ -215,6 +217,8 @@ def agentic_main(repo_root: Path | None = None) -> None:
 
     resolved_repo_root = _resolve_repo_root(repo_root)
     pipeline_options = _options_from_namespace(ns)
+    from rechner_pipeline.orchestrate import wflog
+    wflog.set_demo(pipeline_options.provider == "replay")
     args = AgenticOptions(
         pipeline=pipeline_options,
         max_retries_main=max(0, ns.max_retries_main),
