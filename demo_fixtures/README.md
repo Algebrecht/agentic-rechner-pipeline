@@ -69,14 +69,26 @@ Ausgabe **je Iteration** automatisch weg:
     runs/<zeitstempel>/fixtures/02_iteration.txt
     ...
 
-Dieses Verzeichnis ist direkt replay-fähig:
+Dieses Verzeichnis ist direkt replay-fähig — einen bestimmten Lauf abspielen:
 
     RP_WFLOG=1 RP_REPLAY_DIR=runs/<zeitstempel>/fixtures \
       python agentic_pipeline.py --provider replay --test-mode fixed --max_retries_main 2
 
-So entsteht eine **echte** 2->1->0-Vorführung (keine von Hand konstruierten
-Auslassungen), sofern das Modell im echten Lauf tatsächlich erst unvollständig
-liefert und sich dann korrigiert.
+Oder ohne Zeitstempel-Tippen immer das **jüngste** echte Set abspielen:
+
+    RP_WFLOG=1 RP_REPLAY_DIR="$(ls -dt runs/*/fixtures | head -1)" \
+      python agentic_pipeline.py --provider replay --test-mode fixed --max_retries_main 2
+
+Abgrenzung der Replay-Quellen:
+
+- `RP_REPLAY_DIR=demo_fixtures` -> kuratierte Demo (skriptete 2->1->0-Story).
+- `RP_REPLAY_DIR=runs/<stamp>/fixtures` -> exakte Wiedergabe eines **echten**
+  Laufs (so viele Iterationen, wie er real brauchte).
+
+Der Replay liest das Set nur, legt ein **neues** `runs/<neuer-stamp>/` an und
+fasst das Quell-Set nicht an. So entsteht eine **echte** 2->1->0-Vorführung
+(keine von Hand konstruierten Auslassungen), sofern das Modell im echten Lauf
+tatsächlich erst unvollständig liefert und sich dann korrigiert.
 
 Ein gutes Set lässt sich als dauerhafte Demo übernehmen:
 
