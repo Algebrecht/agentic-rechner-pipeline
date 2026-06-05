@@ -1,23 +1,110 @@
-# demo_fixtures — vorbereitete Modell-Ausgaben für den Replay-Provider
+# Demo & Replay — kostenfreie, reproduzierbare Vorführung der Pipeline
 
-Diese `*_iteration.txt` sind komplette Modell-Ausgaben (FILE_START/END-Bloecke)
-fuer den `--provider replay`. Damit laesst sich der **echte** Pipeline-Workflow
-inkl. agentischer Korrekturschleife **kostenfrei und wiederholbar** vorfuehren —
-ohne API-Aufruf.
+Dieses Verzeichnis ist die **Demo-Schaltzentrale**. Es enthält vorbereitete
+Modell-Ausgaben („Fixtures"), mit denen sich der **echte** agentische
+Pipeline-Workflow inklusive Selbstkorrektur-Schleife **ohne API-Aufruf,
+kostenfrei und jedes Mal identisch** vorführen lässt — ideal für Präsentationen.
 
-Die drei Dateien sind aus einem echten Lauf abgeleitet; die ersten beiden lassen
-gezielt Skalare im Golden-Master-Vertrag weg, sodass echte Abweichungen
-entstehen, die die Schleife real korrigiert:
+## Überblick: was hier zusammenspielt
 
-- `01_iteration.txt` — Skalare `Bxt` und `Pxt` fehlen  -> 2 Abweichungen
-- `02_iteration.txt` — Skalar `Pxt` fehlt              -> 1 Abweichung
-- `03_iteration.txt` — vollstaendig                    -> 0 Abweichungen (bestanden)
+- **Replay-Provider** (`--provider replay`) — ruft kein Modell, sondern gibt
+  vorbereitete Ausgaben aus einem Verzeichnis (`RP_REPLAY_DIR`) in Reihenfolge
+  zurück. Der Rest der Pipeline (Validierung, Golden-Master, Log) läuft echt.
+- **Fixtures** (`*_iteration.txt`) — eingefrorene Modell-Ausgaben (FILE-Blöcke
+  mit erzeugtem Code), eine pro agentischer Iteration.
+- **Workflow-Log** (`RP_WFLOG=1`) — menschen-lesbarer Verlauf je Iteration.
+- **Fixture-Capture** — jeder **echte** Lauf sichert seine Modell-Ausgaben
+  automatisch als wiederverwendbares Replay-Set weg (siehe unten).
 
-## Vorfuehren (mit Workflow-Logger)
+## Schnellstart: die kostenfreie Demo
 
     RP_WFLOG=1 RP_REPLAY_DIR=demo_fixtures \
       python agentic_pipeline.py --provider replay --test-mode fixed --max_retries_main 2
 
-`RP_WFLOG=1` schaltet den menschen-lesbaren Workflow-Log ein (sonst laeuft die
-Pipeline normal/technisch). Der Replay-Provider gibt die Dateien in Reihenfolge
-zurueck; jeder agentische Durchlauf nimmt die naechste.
+Das durchläuft die Reparaturschleife sichtbar **2 -> 1 -> 0** und endet mit
+„617 Werte geprüft — alle stimmen mit dem Excel-Original".
+
+## Die Fixtures in diesem Verzeichnis
+
+Die drei Dateien sind aus **einem echten Lauf abgeleitet**. `03_iteration.txt`
+ist die vollständige, echte Ausgabe; in den ersten beiden wurden gezielt
+Skalare im Golden-Master-Vertrag (`golden_master_outputs()`) **weggelassen**,
+damit echte Abweichungen entstehen, die die Schleife real korrigiert:
+
+- `01_iteration.txt` — Skalare `Bxt` und `Pxt` fehlen  -> 2 Abweichungen
+- `02_iteration.txt` — Skalar `Pxt` fehlt               -> 1 Abweichung
+- `03_iteration.txt` — vollständig                      -> 0 Abweichungen (bestanden)
+
+Der Replay-Provider gibt sie in sortierter Reihenfolge zurück; jeder agentische
+Durchlauf nimmt die nächste, die letzte wird wiederholt.
+
+## Workflow-Log (`RP_WFLOG`)
+
+`RP_WFLOG=1` schaltet den menschen-lesbaren Log ein (sonst läuft die Pipeline
+technisch/still). Er zeigt je Iteration — ausschliesslich aus echten Lauf-Daten,
+nichts hartkodiert: ausgelesene Artefakte, Prompt-Größe + Korrektur-Kontext,
+erzeugte Dateien mit Zeilenzahl, einen echten Code-Auszug aus `actuarial.py`,
+die Golden-Master-Abweichungen und die skalaren Sollwerte.
+
+## Eigene Replay-Sets aus echten Läufen (Fixture-Capture)
+
+Ein Fixture ist nichts anderes als eine **eingefrorene echte Modell-Ausgabe**.
+Deshalb sichert jeder **echte** Lauf (`--provider anthropic` / `openai`) seine
+Ausgabe **je Iteration** automatisch weg:
+
+    runs/<zeitstempel>/fixtures/01_iteration.txt
+    runs/<zeitstempel>/fixtures/02_iteration.txt
+    ...
+
+Dieses Verzeichnis ist direkt replay-fähig:
+
+    RP_WFLOG=1 RP_REPLAY_DIR=runs/<zeitstempel>/fixtures \
+      python agentic_pipeline.py --provider replay --test-mode fixed --max_retries_main 2
+
+So entsteht eine **echte** 2->1->0-Vorführung (keine von Hand konstruierten
+Auslassungen), sofern das Modell im echten Lauf tatsächlich erst unvollständig
+liefert und sich dann korrigiert.
+
+Ein gutes Set lässt sich als dauerhafte Demo übernehmen:
+
+    cp runs/<zeitstempel>/fixtures/*.txt  demo_fixtures/<sprechender-name>/
+    # dann: RP_REPLAY_DIR=demo_fixtures/<sprechender-name>
+
+Capture ist standardmäßig an und nur für echte Provider aktiv (bei `replay`
+wäre die Ausgabe nur die Kopie der Eingabe). Abschalten: `RP_CAPTURE_FIXTURES=0`.
+
+## Lauf-Artefakte: `runs/<zeitstempel>/`
+
+Damit das Repo-Root sauber bleibt, schreibt jeder Lauf alle Artefakte in ein
+eigenes, mit Zeitstempel versehenes Verzeichnis (gitignored):
+
+- `workflow_log.txt` — die Mitschrift des Logs (ohne erneuten Lauf ansehbar)
+- `prompt_iteration_<n>.txt` — der vollständige Prompt je Iteration
+- `main_prompt.txt` / `main_output.txt` — Prompt und rohe Modell-Ausgabe des
+  Haupt-Schritts (zuletzt); `test_*.txt` analog für den Legacy-Test-Schritt
+- `fixtures/` — das wegsicherte Replay-Set (nur echte Läufe)
+
+Aufeinanderfolgende Läufe überschreiben sich dank Zeitstempel nicht. Aufräumen
+jederzeit gefahrlos möglich (alles lokal, nicht im Git):
+
+    rm -r runs/
+
+## Umgebungsvariablen (Referenz)
+
+| Variable | Wirkung |
+|---|---|
+| `RP_WFLOG=1` | Workflow-Log einschalten (Default: aus) |
+| `RP_REPLAY_DIR=<dir>` | Quelle der Replay-Fixtures (Default: `demo_fixtures`) |
+| `RP_RUN_DIR=<dir>` | Basis der Lauf-Verzeichnisse (Default: `runs`) |
+| `RP_WFLOG_FILE=<datei>` | fester Pfad für die Mitschrift statt `runs/<stamp>/workflow_log.txt` |
+| `RP_WFLOG_MAX_ITEMS=<n>` | Obergrenze gelisteter Namen im Log (Default: 12; Rest als `(+N)`) |
+| `RP_CAPTURE_FIXTURES=0` | Fixture-Capture für echte Läufe abschalten |
+
+## Einordnung (ehrlich, für die Präsentation)
+
+Der **Workflow und der Vergleichsmechanismus sind echt** — gleiche Pipeline,
+gleicher Golden-Master, real berechnete Prompts und Vergleichswerte. Beim
+Replay ist nur die **Modell-Antwort** konserviert. Die mitgelieferten Fixtures
+(`01`–`03`) sind eine *skriptete* Verbesserung (Zwischenstände wurden aus einer
+echten Ausgabe abgeleitet). Für eine vollständig nicht-skriptete Selbstkorrektur
+dient der Fixture-Capture aus echten Läufen.

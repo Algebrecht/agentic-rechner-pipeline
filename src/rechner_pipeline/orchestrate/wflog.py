@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+from pathlib import Path
 from typing import Iterable
 
 _ON = bool(os.environ.get("RP_WFLOG"))
@@ -21,9 +22,10 @@ _COLOR = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
 # Verlauf eines Laufs ohne erneuten (API-)Lauf ansehbar ist. Der Default-Name
 # trägt einen Zeitstempel, sodass sich aufeinanderfolgende Läufe nicht
 # überschreiben. Mit RP_WFLOG_FILE lässt sich ein fester Pfad erzwingen.
-_FILE_PATH = os.environ.get("RP_WFLOG_FILE")  # None = automatischer Zeitstempel-Name
+_FILE_PATH = os.environ.get("RP_WFLOG_FILE")  # None = Default im Lauf-Verzeichnis
 _FILE = None  # lazily geöffnet; False = Öffnen fehlgeschlagen
 _RUN_STAMP = None  # pro Prozess einmal
+_RUN_DIR = None  # pro Prozess einmal
 _ANSI = re.compile(r"\033\[[0-9;]*m")
 
 # Obergrenze für aufgelistete Namen (items()), damit Ausgaben auch bei sehr
@@ -46,6 +48,24 @@ def run_stamp() -> str:
 
         _RUN_STAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
     return _RUN_STAMP
+
+
+def run_dir() -> Path:
+    """Verzeichnis für alle Artefakte eines Laufs (Mitschrift, Prompts,
+    Fixtures) — hält das Repo-Root sauber.
+
+    Default ``./runs/<zeitstempel>/`` (Basis via ``RP_RUN_DIR`` überschreibbar);
+    wird bei Bedarf angelegt.
+    """
+    global _RUN_DIR
+    if _RUN_DIR is None:
+        base = Path(os.environ.get("RP_RUN_DIR", "runs"))
+        _RUN_DIR = base / run_stamp()
+        try:
+            _RUN_DIR.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+    return _RUN_DIR
 
 
 def enable(on: bool = True) -> None:
@@ -72,7 +92,7 @@ def _emit(line: str = "") -> None:
     print(line, flush=True)
     global _FILE
     if _FILE is None:
-        path = _FILE_PATH or f"DEBUG_workflow_log_{run_stamp()}.txt"
+        path = _FILE_PATH or (run_dir() / "workflow_log.txt")
         try:
             _FILE = open(path, "w", encoding="utf-8")
         except OSError:

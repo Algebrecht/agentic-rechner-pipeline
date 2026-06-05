@@ -371,7 +371,7 @@ class PipelineRunner:
         )
         final_prompt = _append_repair_context(final_prompt, repair_context)
 
-        debug_prompt_path = self.repo_root / "DEBUG_first_llm_prompt.txt"
+        debug_prompt_path = wflog.run_dir() / "main_prompt.txt"
         write_text(debug_prompt_path, final_prompt)
         if not wflog.enabled():
             print("\n[DEBUG] First LLM prompt written to:")
@@ -401,7 +401,7 @@ class PipelineRunner:
             reasoning_effort=self.options.reasoning_effort,
             max_output_tokens=self.options.max_output_tokens,
         )
-        debug_output_path = self.repo_root / "DEBUG_first_llm_output.txt"
+        debug_output_path = wflog.run_dir() / "main_output.txt"
         write_text(debug_output_path, llm_output)
         if not wflog.enabled():
             print(f"[DEBUG] First LLM output written to: {debug_output_path} "
@@ -482,7 +482,7 @@ class PipelineRunner:
         )
         final_prompt = _append_repair_context(final_prompt, repair_context)
 
-        debug_prompt_path = self.repo_root / "DEBUG_second_llm_prompt.txt"
+        debug_prompt_path = wflog.run_dir() / "test_prompt.txt"
         write_text(debug_prompt_path, final_prompt)
         print("\n[DEBUG] Second LLM prompt written to:")
         print(debug_prompt_path)
@@ -511,7 +511,7 @@ class PipelineRunner:
             reasoning_effort=self.options.reasoning_effort,
             max_output_tokens=self.options.max_output_tokens,
         )
-        debug_output_path = self.repo_root / "DEBUG_second_llm_output.txt"
+        debug_output_path = wflog.run_dir() / "test_output.txt"
         write_text(debug_output_path, llm_output)
         print(f"[DEBUG] Second LLM output written to: {debug_output_path} "
               f"({len(llm_output):,} chars)")

@@ -15,6 +15,7 @@ Ergänzt:
 from __future__ import annotations
 
 import json
+import os
 import re
 import traceback
 from dataclasses import dataclass
@@ -132,9 +133,9 @@ def _diagnostic_artifacts(runner: PipelineRunner, step: str) -> List[Dict[str, A
     ]
     if step in {"main_llm", "test_llm"}:
         debug_prompt = (
-            runner.repo_root / "DEBUG_first_llm_prompt.txt"
+            wflog.run_dir() / "main_prompt.txt"
             if step == "main_llm"
-            else runner.repo_root / "DEBUG_second_llm_prompt.txt"
+            else wflog.run_dir() / "test_prompt.txt"
         )
         paths.append(debug_prompt)
     if step in {"test_llm", "compare"}:
@@ -267,6 +268,34 @@ def _scalar_targets(runner: PipelineRunner):
     return out
 
 
+def _capture_fixture(runner: PipelineRunner, n: int):
+    """Modell-Ausgabe dieser Iteration als wiederverwendbares Replay-Fixture
+    wegsichern: ``runs/<stamp>/fixtures/<nn>_iteration.txt``.
+
+    So liefert jeder echte Lauf automatisch ein echtes Replay-Set. Nur für
+    echte Provider (bei ``replay`` wäre die Ausgabe nur die Kopie der Eingabe);
+    per ``RP_CAPTURE_FIXTURES=0`` abschaltbar. Gibt den Pfad zurück oder None.
+    """
+    if runner.options.provider == "replay":
+        return None
+    if os.environ.get("RP_CAPTURE_FIXTURES", "1") == "0":
+        return None
+    output_path = wflog.run_dir() / "main_output.txt"
+    if not output_path.exists():
+        return None
+    fixtures = wflog.run_dir() / "fixtures"
+    try:
+        fixtures.mkdir(parents=True, exist_ok=True)
+        target = fixtures / f"{n:02d}_iteration.txt"
+        target.write_text(
+            output_path.read_text(encoding="utf-8", errors="replace"),
+            encoding="utf-8",
+        )
+        return target
+    except OSError:
+        return None
+
+
 def _code_excerpt(runner: PipelineRunner, n: int = 18):
     """Auszug der echten Rechenlogik: ``actuarial.py`` ab der ersten
     Funktionsdefinition (deterministisch, kein Raten). Zeigt, wie das Modell
@@ -344,16 +373,19 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
                     "Rechenkern erzeugen" + (" (mit Korrektur-Kontext)" if repair else ""))
     try:
         manifest = runner.run_main_llm(manifest, repair_context=repair)
+        n = _iteration_no(state)
+        fixture = _capture_fixture(runner, n)
         if wflog.enabled():
-            n = _iteration_no(state)
-            prompt_path = runner.repo_root / "DEBUG_first_llm_prompt.txt"
+            prompt_path = wflog.run_dir() / "main_prompt.txt"
             if prompt_path.exists():
                 ptext = prompt_path.read_text(encoding="utf-8", errors="replace")
-                keep = runner.repo_root / f"DEBUG_prompt_iteration_{n}_{wflog.run_stamp()}.txt"
+                keep = wflog.run_dir() / f"prompt_iteration_{n}.txt"
                 keep.write_text(ptext, encoding="utf-8")
                 wflog.detail(f"Prompt an das Modell: {len(ptext)} Zeichen"
                              + (" inkl. Korrektur-Kontext" if repair else "")
                              + f"  (vollständig: {keep.name})")
+            if fixture:
+                wflog.detail(f"Replay-Fixture gesichert: {fixture.parent.name}/{fixture.name}")
             gen_files = sorted(runner.generated_dir.glob("*.py")) + sorted(runner.generated_dir.glob("*.xml"))
             wflog.items(
                 "Erzeugte Dateien",

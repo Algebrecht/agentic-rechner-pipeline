@@ -304,22 +304,24 @@ echten Lauf-Artefakten, nichts ist fest verdrahtet:
 RP_WFLOG=1 python agentic_pipeline.py --provider anthropic --test-mode fixed --max_retries_main 2
 ```
 
-Der Log wird zusaetzlich **mitgeschrieben**, sodass sich ein Lauf ohne erneuten
-(kostenpflichtigen) API-Aufruf wieder ansehen laesst. Jeder Lauf schreibt eine
-eigene, mit **Zeitstempel** versehene Datei — aufeinanderfolgende Laeufe (z. B.
-echt vs. Replay) ueberschreiben sich also nicht:
+Damit das Repo-Root sauber bleibt, schreibt jeder Lauf alle Artefakte in ein
+eigenes, mit **Zeitstempel** versehenes Verzeichnis `runs/<zeitstempel>/`
+(gitignored) — aufeinanderfolgende Laeufe (z. B. echt vs. Replay) ueberschreiben
+sich also nicht. Der Log wird dort **mitgeschrieben**, sodass sich ein Lauf ohne
+erneuten (kostenpflichtigen) API-Aufruf wieder ansehen laesst:
 
 ```bash
-ls DEBUG_workflow_log_*.txt
-cat DEBUG_workflow_log_<zeitstempel>.txt
+ls runs/
+cat runs/<zeitstempel>/workflow_log.txt
 ```
 
-Mit `RP_WFLOG_FILE` laesst sich stattdessen ein fester Pfad erzwingen. Die
-vollstaendigen Prompts jeder Iteration liegen daneben als
-`DEBUG_prompt_iteration_<n>_<zeitstempel>.txt` (erster Prompt vs.
-Korrektur-Prompt). Der Umfang aufgelisteter Namen (Artefakte, Dateien) ist ueber
-`RP_WFLOG_MAX_ITEMS` begrenzbar (Default 12; ueberzaehlige werden als `(+N)`
-gezaehlt).
+Im Lauf-Verzeichnis liegen daneben die vollstaendigen Prompts jeder Iteration
+(`prompt_iteration_<n>.txt`, erster Prompt vs. Korrektur-Prompt) sowie — bei
+echten Laeufen — das automatisch wegsicherte Replay-Set unter `fixtures/`
+(siehe „Eigene Replay-Sets" in `demo_fixtures/README.md`). Mit `RP_WFLOG_FILE`
+laesst sich ein fester Pfad fuer die Mitschrift erzwingen, mit `RP_RUN_DIR` die
+Basis der Lauf-Verzeichnisse. Der Umfang aufgelisteter Namen ist ueber
+`RP_WFLOG_MAX_ITEMS` begrenzbar (Default 12; ueberzaehlige als `(+N)`).
 
 ## Kostenfreie Vorfuehrung (`--provider replay`)
 
