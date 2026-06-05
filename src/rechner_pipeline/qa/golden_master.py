@@ -91,6 +91,10 @@ class Report:
     scalar_rows: List[Tuple[str, str, Optional[float], Optional[float], str]] = field(
         default_factory=list
     )
+    # Tabellen-Stichprobe: (prefix, spalte, zeile, erwartet, berechnet, status)
+    table_samples: List[Tuple[str, str, int, Optional[float], Optional[float], str]] = field(
+        default_factory=list
+    )
 
     @property
     def ok(self) -> bool:
@@ -116,6 +120,10 @@ class Report:
         for prefix, name, ev, cv, status in self.scalar_rows:
             lines.append(
                 f"  SKALAR: {prefix}:{name} status={status} erwartet={ev} berechnet={cv}"
+            )
+        for prefix, col, ri, ev, cv, status in self.table_samples:
+            lines.append(
+                f"  TABELLE: {prefix}:{col}[{ri}] status={status} erwartet={ev} berechnet={cv}"
             )
         total = self.scalars_tested + self.table_cells_tested
         lines.append(
@@ -174,6 +182,12 @@ def _compare_tables(expected, computed, report: Report) -> None:
                     report.deviations.append(
                         f"{prefix}:{col}[{ri}] berechnet={cv} erwartet={ev}"
                     )
+                    status = "fehlt" if cv is None else "abw"
+                else:
+                    status = "ok"
+                # kleine Stichprobe für die Anzeige (erste Zeilen, mehrere Spalten)
+                if ri < 4 and len(report.table_samples) < 12:
+                    report.table_samples.append((prefix, col, ri, ev, cv, status))
 
 
 def compare(expected: Dict[str, Any], computed: Dict[str, Any]) -> Report:

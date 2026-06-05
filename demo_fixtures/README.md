@@ -46,12 +46,14 @@ nichts hartkodiert:
 
 - **Auslesen:** ausgelesene Artefakte (echte Namen) + ein paar echte
   Excel-Originalformeln aus den Sheet-CSVs.
-- **Erzeugen:** Prompt-Größe + Korrektur-Kontext, erzeugte Dateien mit
-  Zeilenzahl, das Funktions-Inventar von `actuarial.py`, ein echter
-  Code-Auszug der Rechenlogik, sowie ein **Diff von `golden_master_outputs()`
-  gegenüber der Vor-Iteration** (zeigt die Selbstkorrektur in echtem Code).
+- **Erzeugen:** Prompt-Größe + Korrektur-Kontext, Prompt-Anfang (erste ~280
+  Zeichen), erzeugte Dateien mit Zeilenzahl, das Funktions-Inventar von
+  `actuarial.py`, ein echter Code-Auszug der Rechenlogik, sowie ein **Diff von
+  `golden_master_outputs()` gegenüber der Vor-Iteration** (zeigt die
+  Selbstkorrektur in echtem Code).
 - **Validieren:** eine **Soll/Ist-Tabelle** je Skalar (Excel-Soll vs.
-  berechnet, Δ, Status) und die Golden-Master-Abweichungen.
+  berechnet, Δ, Status), ein **Auszug der Verlaufs-/Tabellenwerte** (ebenfalls
+  Soll/Ist) und die Golden-Master-Abweichungen.
 - **Abschluss:** eine Zusammenfassungs-Karte (migrierte Werte, Iterationen,
   Konvergenz `2 -> 1 -> 0`, Laufzeit, bestanden/nicht bestanden).
 

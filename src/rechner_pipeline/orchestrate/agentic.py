@@ -361,6 +361,35 @@ def _scalar_table(runner: PipelineRunner):
     return rows
 
 
+def _table_sample(runner: PipelineRunner):
+    """Stichprobe der Verlaufs-/Tabellenwerte aus dem Compare-Ergebnis
+    (TABELLE:-Zeilen). Liefert [(zeile, spalte, erwartet, berechnet, status)]."""
+    path = runner.compare_result_path
+    if not path.exists():
+        return []
+    try:
+        stdout = json.loads(path.read_text(encoding="utf-8")).get("stdout", "")
+    except (OSError, json.JSONDecodeError):
+        return []
+    rows = []
+    for ln in stdout.splitlines():
+        t = ln.strip()
+        if not t.startswith("TABELLE:"):
+            continue
+        parts = t[len("TABELLE:"):].split()
+        if not parts:
+            continue
+        body = parts[0].split(":", 1)[-1]  # spalte[zeile]
+        kv = dict(p.split("=", 1) for p in parts[1:] if "=" in p)
+        if "[" in body:
+            col, rest = body.split("[", 1)
+            ri = rest.rstrip("]")
+        else:
+            col, ri = body, ""
+        rows.append((ri, col, kv.get("erwartet"), kv.get("berechnet"), kv.get("status")))
+    return rows
+
+
 def _gm_return_block(runner: PipelineRunner):
     """Die ganze Funktion ``golden_master_outputs()`` aus den erzeugten Dateien
     (über den festen Namen gefunden). So findet ein Diff genau die geänderten
@@ -412,6 +441,29 @@ def _render_scalar_table(runner: PipelineRunner) -> None:
         ["Skalar", "Excel-Soll", "berechnet", "Δ", "Status"],
         table_rows,
         aligns=["l", "r", "r", "r", "l"],
+    )
+
+
+def _render_table_sample(runner: PipelineRunner) -> None:
+    """Auszug der Verlaufs-/Tabellenwerte als Soll/Ist-Tabelle."""
+    rows = _table_sample(runner)
+    if not rows:
+        return
+
+    def _key(r):
+        ri = str(r[0])
+        return (int(ri) if ri.lstrip("-").isdigit() else 0, r[1])
+
+    rows = sorted(rows, key=_key)[:9]  # zeilenweise gruppiert
+    trows = [
+        [ri, col, _fmt_num(ev), _fmt_num(cv), _delta(ev, cv), _STATUS_LABEL.get(st, st)]
+        for ri, col, ev, cv, st in rows
+    ]
+    wflog.detail("Verlaufswerte (Auszug, Soll/Ist):")
+    wflog.table(
+        ["Zeile", "Spalte", "Excel-Soll", "berechnet", "Δ", "Status"],
+        trows,
+        aligns=["r", "l", "r", "r", "r", "l"],
     )
 
 
@@ -488,7 +540,7 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
     try:
         manifest = runner.run_main_llm(manifest, repair_context=repair)
         n = _iteration_no(state)
-        fixture = _capture_fixture(runner, n)
+        _capture_fixture(runner, n)  # Replay-Set still mitschneiden (nicht im Log)
         if wflog.enabled():
             prompt_path = wflog.run_dir() / "main_prompt.txt"
             if prompt_path.exists():
@@ -498,8 +550,9 @@ def main_llm_node(state: AgenticState) -> Dict[str, Any]:
                 wflog.detail(f"Prompt an das Modell: {len(ptext)} Zeichen"
                              + (" inkl. Korrektur-Kontext" if repair else "")
                              + f"  (vollständig: {keep.name})")
-            if fixture:
-                wflog.detail(f"Replay-Fixture gesichert: {fixture.parent.name}/{fixture.name}")
+                wflog.detail("Prompt-Anfang:")
+                for ln in ptext.strip()[:280].splitlines():
+                    wflog.code(ln)
             gen_files = sorted(runner.generated_dir.glob("*.py")) + sorted(runner.generated_dir.glob("*.xml"))
             wflog.items(
                 "Erzeugte Dateien",
@@ -578,6 +631,7 @@ def compare_node(state: AgenticState) -> Dict[str, Any]:
         _n, _d, tested = _compare_summary(runner)
         if wflog.enabled():
             _render_scalar_table(runner)
+            _render_table_sample(runner)
             _record_convergence(runner, n, 0, tested)
         wflog.ok((f"{tested} Werte geprüft — alle stimmen mit dem Excel-Original")
                  if tested else "alle Werte stimmen mit dem Excel-Original")
@@ -588,6 +642,7 @@ def compare_node(state: AgenticState) -> Dict[str, Any]:
         dn, devs, tested = _compare_summary(runner)
         if wflog.enabled():
             _render_scalar_table(runner)
+            _render_table_sample(runner)
             _record_convergence(runner, n, dn, tested)
             # Tabellen-Zell-Abweichungen ergänzen (Skalare stehen in der Tabelle)
             for d in [x for x in devs if "[" in x][:6]:
