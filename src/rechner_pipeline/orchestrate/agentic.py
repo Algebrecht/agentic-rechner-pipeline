@@ -496,9 +496,15 @@ def _render_table_sample(runner: PipelineRunner) -> None:
 
 
 def _record_convergence(runner: PipelineRunner, n: int, deviations: int, tested: int) -> None:
-    """Pro Iteration eine Zeile (n;Abweichungen;geprüft) für die Abschluss-Karte."""
+    """Pro Iteration eine Zeile (n;Abweichungen;geprüft) für die Abschluss-Karte.
+
+    Erste Iteration schreibt die Datei frisch ("w"), sonst anhängen ("a") —
+    wichtig, weil Demo-Läufe sich ``runs/demo`` teilen und sich sonst über
+    mehrere Läufe aufsummieren würden.
+    """
     try:
-        with (wflog.run_dir() / "convergence.csv").open("a", encoding="utf-8") as f:
+        mode = "w" if n <= 1 else "a"
+        with (wflog.run_dir() / "convergence.csv").open(mode, encoding="utf-8") as f:
             f.write(f"{n};{deviations};{tested}\n")
     except OSError:
         pass
