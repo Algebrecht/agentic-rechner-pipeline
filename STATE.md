@@ -3,7 +3,7 @@
 > Live "what is true today" document. Maintained by the project lead only.
 > Conclusions, not aspirations: nothing is marked done until a gate is verified by running it.
 
-_Last updated: 2026-06-19 — **MIGRATION COMPLETE & SOUND** (final review verdict). KLV kernel accepted hands-off (assurance exit 0, dossier accepted, coverage full); green proven real (anti-overfit + 1:1 VBA port verified); all 15 §4.2 steps done; 271 tests green._
+_Last updated: 2026-06-25 — Codex-centric repo workflow added without removing the Claude CLI workflow. Claude skills remain in `.claude/skills/`; Codex-visible mirrored skills live in `.agents/skills/`; root `AGENTS.md` is now the durable repo instruction surface. No MCP/RPC path is supported._
 
 ## Mission
 
@@ -15,18 +15,19 @@ We build into: `C:\AG-Bestandsmigration\agentic-rechner-pipeline`.
 
 | # | Decision | Choice |
 |---|---|---|
-| 1 | CLI target | **Claude CLI only.** Author the portable §6.7 body once; install/verify only `.claude/skills/build-vergleichsrechenkern/SKILL.md`. Other CLIs = documented VERIFY stubs. |
+| 1 | CLI target | **Claude CLI + Codex CLI.** Claude remains supported through `.claude/skills/`. Codex is supported through root `AGENTS.md` plus mirrored repo skills under `.agents/skills/`. Other CLIs remain documented VERIFY stubs. |
 | 2 | Gate scope | **All gates G0–G8** (extract, validate, security, conventions, golden_master, algebraic[Hypothesis], roundtrip, dossier). |
 | 3 | Definition of done | **End-to-end on KLV:** build toolbox+skill AND actually generate the six `generated/` files for KLV, driving them to acceptance (or honest `human_review_required`). |
 | 4 | Dependencies | **PUBLIC repo — public pypi.org only, pinned versions. NO corporate Artifactory / no corporate resources.** Fresh `.venv` on scoop Python 3.12.4. |
 
 ## Environment facts
 
-- Python: scoop `python` 3.12.4. pandas 3.0.0 + pytest 9.0.2 globally importable; openpyxl/oletools/hypothesis missing → install pinned from pypi.org into `.venv`.
-- Test workbooks available (read-only) at source `examples/`: `Tarifrechner_KLV.xlsm`, `Tarifrechner_FLV_v1.xlsm` — to be COPIED into this repo's `examples/`.
+- Python: package declares `>=3.11`. Use a repo-local `.venv` and install pinned deps from public pypi.org with `python -m pip install -e ".[dev]"`.
+- Latest local verification in this repo: `.venv` on Python 3.13.5, `pytest==8.4.2`, `hypothesis==6.155.5`; full suite `287 passed, 1 skipped`.
+- Test workbooks live under this repo's `examples/`: `Tarifrechner_KLV.xlsm`, `Tarifrechner_FLV_v1.xlsm`.
 - Six generated files (order fixed): `inputs.py, params.py, tafeln.xml, commutation.py, actuarial.py, test_run.py`.
 
-## Target package layout (intended)
+## Current package layout
 
 ```
 src/rechner_pipeline/
@@ -36,7 +37,8 @@ src/rechner_pipeline/
   qa/           golden_master.py, fs_confine.py, security.py      (MIGRATE)
   models/       manifest.py (ExportManifest), bundle.py (InputBundle), schemas.py (§6.8)
   cli.py        source-neutral (--input/--adapter)
-.claude/skills/build-vergleichsrechenkern/SKILL.md   (canonical §6.7 body)
+.claude/skills/build-vergleichsrechenkern/SKILL.md   (Claude skill entry point)
+.agents/skills/build-vergleichsrechenkern/SKILL.md   (Codex repo skill mirror)
 qa_contract.json (algebraic gate contract, §6.8.6)
 ```
 
@@ -64,17 +66,18 @@ qa_contract.json (algebraic gate contract, §6.8.6)
 | 5 | Final brutal review: KLV kernel faithfulness/overfit + migration completeness vs §4.1/§4.2 | 1 review | **CLOSED — verdict: COMPLETE & SOUND; green proven REAL; no Critical/High** |
 | 6 | Operator handoff distillation (ONBOARDING.md, 96 ln) | 1 (product-dev) | **CLOSED** |
 
-**Skill bug to fix post-W4:** build-vergleichsrechenkern SKILL says qa_contract.json lives in `generated/`; must be OUTSIDE it (G1 validate fails on a 7th file). Wave 4 places it at repo root / config; fix the skill after.
-| 3 | Skill body §6.7 + source-neutral cli.py + Claude skill install + SDK/LangGraph absence verification | 1–2 | pending |
-| 4 | End-to-end: generate KLV six files, drive all gates to acceptance, write dossier | 1 (skill execution) | pending |
+**Post-W4 skill bug fixed:** build-vergleichsrechenkern now keeps `qa_contract.json` outside
+`generated/` and writes dossier artifacts under `diagnostics/`. Codex mirrors are tested against
+the Claude skills.
 
 Each wave → independent review gate (code-review-architect) before close. After each wave → an agentic-product-development expert distills feedback into reusable skills/agents.
 
 ## Open items / risks being tracked
 
 - Baseline capture must write ONLY into this repo's tmp; never into the source repo.
-- golden_master unmatched-column false-accept (MIGRATION §2.6, step 6) must be fixed, with a regression fixture.
-- algebraic gate requires a per-product `qa_contract.json` (KLV) — needs the actuarial conventions declared.
+- Keep `.claude/skills/` and `.agents/skills/` in parity unless a deliberate cross-CLI
+  difference is documented and tested.
+- Do not add or document MCP/RPC workflow paths.
 
 ## Gate status ledger (KLV)
 
@@ -92,4 +95,6 @@ Each wave → independent review gate (code-review-architect) before close. Afte
 
 **KLV kernel (Wave 4):** six files in `generated/` + `qa_contract.json` (repo root). Interest 1.75%, mortality DAV1994_T_M, ω=100. assurance ACCEPTED hands-off & idempotent (lead-verified 2026-06-19).
 
-**Open integration gaps (pre-Wave-2):** (1) gates don't emit `<command>.gate.json` ledger entries → dossier can't aggregate; extract/validate lack `--diagnostics-dir`. (2) security adds extra `snippet` key — confirm GateLedgerEntry tolerates. (3) §2.2.11 scalar literals (COM-origin) differ in trailing decimals from openpyxl cached values — golden_master/e2e must use live-extracted expectations, not the appendix literals. (4) golden_master requires `--info-dir` under `--repo-root` (fs_confine).
+**Resolved historical gaps:** gate ledgers, shared `--diagnostics-dir`, G2-before-execute,
+dossier aggregation, and KLV acceptance wiring are complete. Historical notes in older wave
+logs are not current truth unless corroborated by code and tests.

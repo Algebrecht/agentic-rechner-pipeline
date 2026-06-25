@@ -12,6 +12,7 @@ __pycache__/
 .tmp/
 .verify/
 g/
+agent-comm.db*
 
 # Regenerable pipeline run artifacts (produced by `extract` / `assurance`)
 info_from_excel/

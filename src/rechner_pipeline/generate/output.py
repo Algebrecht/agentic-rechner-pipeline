@@ -534,3 +534,19 @@ def validate_main_output_files(text: str) -> List[Tuple[str, str]]:
     if not result.ok:
         raise OutputValidationError(result.errors[0].message)
     return extract_files_from_text(text)
+
+
+def write_validated_main_output_to_generated_dir(text: str, repo_root: Path) -> int:
+    """Validate FILE-block text and write the six files under ``generated/``.
+
+    Validation is completed before any file is written, so a bad response cannot
+    partially replace a previous generated directory. This helper exists only
+    for CLIs that emit text responses; direct file edits plus G1 validation are
+    the preferred target workflow.
+    """
+    items = validate_main_output_files(text)
+    generated_dir = Path(repo_root) / "generated"
+    generated_dir.mkdir(parents=True, exist_ok=True)
+    for filename, content in items:
+        (generated_dir / filename).write_text(content, encoding="utf-8")
+    return len(items)

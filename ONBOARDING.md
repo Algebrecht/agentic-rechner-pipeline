@@ -7,19 +7,27 @@ There is **no LLM SDK in the codebase** — the CLI agent (you, via a skill) *is
 Python tool only extracts, validates, and accepts. Generation/repair = agent; acceptance = code.
 
 ## 2. Setup
-- Python **3.12.4** (scoop), fresh **`.venv`**, **public pypi.org only** (no Artifactory), pinned deps.
-- One install command (from repo root):
+- Python **>=3.11**, fresh **`.venv`**, **public pypi.org only** (no Artifactory), pinned deps.
+- Install from repo root:
+  ```
+  python -m pip install -e ".[dev]"
+  ```
+- Windows venv form:
   ```
   .venv\Scripts\python.exe -m pip install -e ".[dev]"
+  ```
+- POSIX venv form:
+  ```
+  .venv/bin/python -m pip install -e ".[dev]"
   ```
   Runtime: `openpyxl==3.1.5`, `oletools==0.60.2`, `pandas==2.3.3`. Dev: `pytest==8.4.2`, `hypothesis==6.155.5`.
 
 ## 3. Run it
 **Accept an already-generated kernel (one command, the KLV worked example):**
 ```
-.venv\Scripts\python.exe -m rechner_pipeline.cli assurance ^
-    --repo-root . --input examples\Tarifrechner_KLV.xlsm ^
-    --generated-dir generated --info-dir info_from_excel ^
+python -m rechner_pipeline.cli assurance \
+    --repo-root . --input examples/Tarifrechner_KLV.xlsm \
+    --generated-dir generated --info-dir info_from_excel \
     --diagnostics-dir diagnostics --qa-contract qa_contract.json --adapter excel
 ```
 Runs the chain `extract → validate → security → conventions → golden_master → algebraic →
@@ -30,6 +38,11 @@ roundtrip → dossier` over one shared `--diagnostics-dir`; aggregate exit code 
 `info_from_excel/` bundle, writes the six files, drives the gates to acceptance). KLV facts:
 interest 1.75%, mortality `DAV1994_T_M`, ω=100; expectations = 5 scalars (`Bxt, BJB, BZB, Pxt, ratzu`)
 + 612 table cells, coverage `full`.
+
+**Agent surfaces:** Claude CLI uses `.claude/skills/build-vergleichsrechenkern/SKILL.md`.
+Codex CLI uses the root `AGENTS.md` plus `.agents/skills/build-vergleichsrechenkern/SKILL.md`.
+Those skill bodies are intentionally mirrored and covered by tests. Start Codex at repo root
+or run `codex exec --cd . --sandbox workspace-write --ask-for-approval on-request "..."`.
 
 ## 4. The gates (each: `python -m rechner_pipeline.toolbox.<cmd>`, or run all via `assurance`)
 | Gate | Proves | Exit | Command |
@@ -78,9 +91,8 @@ Exit 2 = usage, 50 = internal. A non-zero exit is **blocking**, never downgraded
 - fs_confine (G4) is **defense-in-depth, not an OS sandbox**; trust = G2 static + G4 confine + subprocess isolation.
 
 ## 8. Status
-**COMPLETE & SOUND** (final review verdict). **271 tests green.** KLV kernel **accepted** hands-off &
-idempotent (assurance exit 0, dossier accepted, coverage full; green proven real — anti-overfit + 1:1 VBA port).
-Explicitly **future**: a Word input adapter (seam exists, not implemented) and an optional **local stdio MCP**
-surface. No MCP seam exists yet (greenfield); if added, it must be a thin `rechner_pipeline.toolbox.mcp_stdio`
-wrapper that calls the existing gate `main()`s and returns the same JSON — NO separate gate logic, and
-**HTTP/SSE MCP is prohibited** (MIGRATION.md §3.3/§5.3).
+**COMPLETE & SOUND** (final review verdict). Current verification: **287 passed, 1 skipped**.
+KLV kernel **accepted** hands-off & idempotent (assurance exit 0, dossier accepted, coverage
+full; green proven real — anti-overfit + 1:1 VBA port).
+Explicitly **future**: a Word input adapter (seam exists, not implemented). No MCP/RPC seam exists
+today; use the plain Python toolbox commands.

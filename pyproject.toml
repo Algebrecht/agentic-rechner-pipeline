@@ -9,7 +9,7 @@ description = "Full-agentic, CLI-driven Excel-to-Python actuarial migration pipe
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Proprietary" }
-authors = authors = [
+authors = [
     { name = "Bartlomiej Maciaga" },
     { name = "Arno Rasch" },
     { name = "Albrecht Brehm"},

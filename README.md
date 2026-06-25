@@ -2,9 +2,11 @@
 
 Full-agentic, CLI-driven Excel-to-Python actuarial migration pipeline.
 
-This repository hosts the foundation layer (wave 0): shared toolbox contract,
-typed data models, and scaffolding. Gate command bodies are delivered in later
-waves. See `MIGRATION.md` for the complete specification.
+This repository contains the deterministic acceptance layer for migrating an
+Excel/VBA actuarial *Tarifrechner* into a six-file pure-Python comparison
+kernel. The agent writes and repairs the kernel; this package extracts inputs,
+runs gates, and produces the mechanical acceptance dossier. See `MIGRATION.md`
+for the full architecture history and specification.
 
 ## Usage
 
@@ -13,6 +15,26 @@ gate suite that decides whether an already-generated comparison kernel is
 acceptable. Code generation and self-repair are owned by the migration *agent*
 (a CLI skill — see `build-vergleichsrechenkern`), **not** by this tool: there is
 no model / provider / token / reasoning surface and no LLM acceptance path.
+
+## Setup
+
+Use a local virtual environment and install the pinned development dependencies:
+
+```
+python -m pip install -e ".[dev]"
+```
+
+On Windows, use the venv interpreter path where appropriate:
+
+```
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+On POSIX shells:
+
+```
+.venv/bin/python -m pip install -e ".[dev]"
+```
 
 ### Source-neutral options
 
@@ -73,14 +95,26 @@ Each gate is also runnable directly:
 python -m rechner_pipeline.toolbox.<command> [flags]
 ```
 
+### Agent workflow surfaces
+
+Claude CLI remains supported through `.claude/skills/`. Codex CLI is supported
+through the repository `AGENTS.md` plus mirrored repo skills in `.agents/skills/`.
+The Codex skill copies are tested for byte-for-byte parity with the Claude skill
+bodies so one workflow does not silently drift from the other.
+
+The portable baseline is local files plus plain Python commands. There is no
+`rechner_pipeline.toolbox.mcp_stdio` module and no supported MCP/RPC path in the
+current codebase.
+
 ### No SDK / LangGraph in the target execution path
 
-The target carries **no** Python LLM SDK or LangGraph orchestration. Verified
-with:
+The target carries **no** Python LLM SDK or LangGraph orchestration in `src/`.
+Verify with:
 
 ```
-grep -rEi "anthropic|openai|OPENAI_API_KEY|ANTHROPIC_API_KEY|langgraph|StateGraph|rechner-pipeline-agentic" src pyproject.toml requirements.txt requirements-dev.txt
+rg -n -i "anthropic|openai|OPENAI_API_KEY|ANTHROPIC_API_KEY|langgraph|StateGraph|rechner-pipeline-agentic" src pyproject.toml
 ```
 
-This returns **no matches** (grep exit code 1). The CLI exposes only the
-deterministic gate suite; generation/repair is the agent's responsibility.
+This should return **no matches** for active target code/config. The CLI exposes
+only the deterministic gate suite; generation/repair is the agent's
+responsibility.
