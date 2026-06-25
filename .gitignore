@@ -17,6 +17,7 @@ agent-comm.db*
 # Regenerable pipeline run artifacts (produced by `extract` / `assurance`)
 info_from_excel/
 diagnostics/
+generated/
 
 # Local CLI settings (skills under .claude/skills/ ARE tracked)
 .claude/settings.local.json
